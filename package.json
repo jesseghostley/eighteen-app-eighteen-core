@@ -1,0 +1,24 @@
+{
+  "name": "eighteen-core",
+  "version": "0.1.0",
+  "description": "Self-healing AI agent framework with git-audited execution via Pope-Claw bridge",
+  "main": "dist/gateway/server.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/gateway/server.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@octokit/rest": "^21.0.0",
+    "express": "^4.21.0",
+    "grammy": "^1.30.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  },
+  "license": "MIT"
+}
