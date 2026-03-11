@@ -1,0 +1,20 @@
+name: pope-claw-exec
+on:
+  repository_dispatch:
+    types: [pope-claw-exec]
+jobs:
+  exec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Execute task
+        run: echo "${{ github.event.client_payload.task }}"
+      - name: Log to PROJECT-LOG
+        run: |
+          echo "## $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> PROJECT-LOG.md
+          echo "Task: ${{ github.event.client_payload.task }}" >> PROJECT-LOG.md
+          git config user.name "pope-claw"
+          git config user.email "pope-claw@eighteen.ai"
+          git add PROJECT-LOG.md
+          git commit -m "Log: ${{ github.event.client_payload.task }}" || true
+          git push || true
