@@ -1,0 +1,30 @@
+# Eighteen Core — One-command local setup
+# Usage: docker compose up -d
+#
+# Required: Create a .env file first (see .env.example)
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    ports:
+      - "${EIGHTEEN_PORT:-3000}:3000"
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GITHUB_PAT=${GITHUB_PAT}
+      - POPE_CLAW_WEBHOOK_SECRET=${POPE_CLAW_WEBHOOK_SECRET}
+      - POPE_CLAW_REPO=${POPE_CLAW_REPO}
+      - POPE_CLAW_CALLBACK_URL=${POPE_CLAW_CALLBACK_URL}
+      - EIGHTEEN_MODEL=${EIGHTEEN_MODEL:-claude-sonnet-4-20250514}
+      - EIGHTEEN_PORT=3000
+    volumes:
+      - eighteen-config:/root/.eighteen
+      - eighteen-workspace:/app/workspace
+    restart: unless-stopped
+
+volumes:
+  eighteen-config:
+  eighteen-workspace:
