@@ -1,0 +1,39 @@
+{
+  "_comment": "Pope-Claw Bridge Configuration",
+  "_comment2": "Copy this to ~/.eighteen/pope-claw.json and fill in your values",
+  "_comment3": "NEVER commit actual tokens — use environment variables",
+
+  "remoteTool": {
+    "_comment": "Enable/disable the GitHub Actions bridge",
+    "enabled": true,
+
+    "_comment2": "GitHub repo where pope-claw-exec.yml lives",
+    "repo": "eighteen-app/eighteen-core",
+
+    "_comment3": "Branch where audit commits are pushed",
+    "branch": "audit/main",
+
+    "_comment4": "Workflow filename to trigger",
+    "workflowId": "pope-claw-exec.yml",
+
+    "_comment5": "URL where GitHub Actions sends results back (your host must be reachable)",
+    "callbackUrl": "https://your-host.example.com/api/pope-claw/callback",
+
+    "_comment6": "Max time to wait for a GitHub Action to complete (ms)",
+    "timeoutMs": 120000
+  },
+
+  "_comment4": "Tools routed through GitHub Actions (destructive, audited)",
+  "remoteTools": ["exec", "bash", "write", "edit", "apply_patch"],
+
+  "_comment5": "Tools executed locally (read-only, fast)",
+  "localTools": ["read", "grep", "glob", "web_search", "web_fetch", "message"],
+
+  "retryPolicy": {
+    "_comment": "Auto-retry transient failures (network, rate limit, runner unavailable)",
+    "maxRetries": 2,
+
+    "_comment2": "Backoff intervals in ms: first retry after 30s, second after 90s",
+    "backoffMs": [30000, 90000]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "soulspec": "1.0",
+  "name": "eighteen-core",
+  "description": "Security-conscious AI agent with git-audited execution",
+  "files": [
+    "SOUL.md",
+    "IDENTITY.md",
+    "STYLE.md",
+    "HEARTBEAT.md"
+  ]
+}
