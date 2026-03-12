@@ -13,12 +13,16 @@ services:
       - "${EIGHTEEN_PORT:-3000}:3000"
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GITHUB_PAT=${GITHUB_PAT}
       - POPE_CLAW_WEBHOOK_SECRET=${POPE_CLAW_WEBHOOK_SECRET}
       - POPE_CLAW_REPO=${POPE_CLAW_REPO}
       - POPE_CLAW_CALLBACK_URL=${POPE_CLAW_CALLBACK_URL}
+      # Provider config: "anthropic" (default) or "openrouter"
+      - EIGHTEEN_PROVIDER=${EIGHTEEN_PROVIDER:-anthropic}
       - EIGHTEEN_MODEL=${EIGHTEEN_MODEL:-claude-sonnet-4-20250514}
+      # API keys — set the one matching your provider
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - EIGHTEEN_PORT=3000
     volumes:
       - eighteen-config:/root/.eighteen
