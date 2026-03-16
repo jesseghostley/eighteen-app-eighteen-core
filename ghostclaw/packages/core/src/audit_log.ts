@@ -63,7 +63,9 @@ export type AuditEventType =
   | 'worker_backend.updated'
   | 'package.compatibility.checked'
   | 'package.compatibility.failed'
-  | 'package.compatibility.satisfied';
+  | 'package.compatibility.satisfied'
+  | 'blueprint.launch_readiness.failed'
+  | 'blueprint.launch_readiness.satisfied';
 
 export type AuditLogEntry = {
   /** Globally unique identifier. MUST be immutable after creation. */

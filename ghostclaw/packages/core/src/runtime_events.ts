@@ -7,6 +7,7 @@ import type { RemoteExecutionRequest, RemoteExecutionResult } from './remote_exe
 import type { WorkerNode } from './worker_node';
 import type { WorkerBackendManifest } from './worker_backend_manifest';
 import type { CompatibilityCheckResult } from './package_compatibility';
+import type { BlueprintLaunchReadinessResult } from './blueprint_launch_readiness';
 
 /**
  * RuntimeEventMap — strongly-typed mapping of every runtime lifecycle event
@@ -89,4 +90,11 @@ export interface RuntimeEventMap {
   'package.compatibility.failed': CompatibilityCheckResult;
   /** Package compatibility check satisfied — compatible backend(s) found. */
   'package.compatibility.satisfied': CompatibilityCheckResult;
+
+  // ── Blueprint launch readiness lifecycle ───────────────────────────────────
+
+  /** Blueprint launch readiness check failed — not ready to launch. */
+  'blueprint.launch_readiness.failed': BlueprintLaunchReadinessResult;
+  /** Blueprint launch readiness check satisfied — ready to launch. */
+  'blueprint.launch_readiness.satisfied': BlueprintLaunchReadinessResult;
 }
