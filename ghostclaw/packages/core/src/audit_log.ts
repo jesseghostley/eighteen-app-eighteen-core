@@ -60,7 +60,10 @@ export type AuditEventType =
   | 'worker.offline'
   | 'worker_backend.registered'
   | 'worker_backend.unregistered'
-  | 'worker_backend.updated';
+  | 'worker_backend.updated'
+  | 'package.compatibility.checked'
+  | 'package.compatibility.failed'
+  | 'package.compatibility.satisfied';
 
 export type AuditLogEntry = {
   /** Globally unique identifier. MUST be immutable after creation. */

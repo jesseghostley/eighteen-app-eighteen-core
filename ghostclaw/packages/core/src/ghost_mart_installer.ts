@@ -21,6 +21,7 @@ import { workspaceInstallStore } from './ghost_mart_workspace_install';
 import { agentRegistry } from './agent_registry';
 import { eventBus } from './event_bus';
 import { auditLog } from './audit_log';
+import type { PackageCompatibilityChecker } from './package_compatibility';
 
 /** Known permissions that the installer will accept during validation. */
 const KNOWN_PERMISSIONS = new Set([
@@ -49,6 +50,17 @@ const blueprintRegistry = new Map<string, GhostMartPackage>();
 const skillRegistry = new Map<string, GhostMartPackage>();
 
 export class GhostMartInstaller {
+  private compatibilityChecker: PackageCompatibilityChecker | null = null;
+
+  /**
+   * Set an optional compatibility checker for backend validation during
+   * install and enable.  When set, install() and enable() will reject
+   * packages that have no compatible backend in the target workspace.
+   */
+  setCompatibilityChecker(checker: PackageCompatibilityChecker): void {
+    this.compatibilityChecker = checker;
+  }
+
   /**
    * discover — loads packages from a manifest array into the package store.
    *
@@ -121,6 +133,19 @@ export class GhostMartInstaller {
       throw new Error(
         `Cannot install package '${packageId}': ${validation.errors.join('; ')}`,
       );
+    }
+
+    // Backend compatibility check (if checker is configured)
+    if (this.compatibilityChecker) {
+      const compat = this.compatibilityChecker.validatePackageCompatibility(
+        packageId,
+        workspaceId,
+      );
+      if (!compat.compatible) {
+        throw new Error(
+          `Cannot install package '${packageId}': ${compat.failure_reasons.join('; ')}`,
+        );
+      }
     }
 
     const now = Date.now();
@@ -205,6 +230,22 @@ export class GhostMartInstaller {
    * @throws Error if the record is not found.
    */
   enable(installId: string): WorkspaceInstallRecord {
+    // Backend compatibility re-check at enable time (backends may have changed since install)
+    if (this.compatibilityChecker) {
+      const existing = workspaceInstallStore.getById(installId);
+      if (existing) {
+        const compat = this.compatibilityChecker.validatePackageCompatibility(
+          existing.package_id,
+          existing.workspace_id,
+        );
+        if (!compat.compatible) {
+          throw new Error(
+            `Cannot enable package '${existing.package_id}': ${compat.failure_reasons.join('; ')}`,
+          );
+        }
+      }
+    }
+
     const now = Date.now();
     const record = workspaceInstallStore.updateStatus(installId, 'enabled', now, {
       enabled_at: now,
