@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GhostClaw Runtime Dashboard</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: Arial, sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+      h1 {
+        margin: 0 0 16px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 12px;
+      }
+      .panel {
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 12px;
+        background: #111827;
+      }
+      .panel h2 {
+        margin: 0 0 8px;
+        font-size: 1.05rem;
+      }
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 12px;
+      }
+      .meta {
+        margin: 8px 0 16px;
+        color: #93c5fd;
+        font-size: 0.9rem;
+      }
+      .error {
+        color: #fca5a5;
+      }
+      /* Skill Invocations panel */
+      .panel-full {
+        grid-column: 1 / -1;
+      }
+      .si-filters {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+      .si-filters input,
+      .si-filters select {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 4px;
+        color: #e2e8f0;
+        font-size: 12px;
+        padding: 4px 8px;
+        font-family: monospace;
+      }
+      .si-filters input::placeholder {
+        color: #64748b;
+      }
+      .si-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .si-table th {
+        text-align: left;
+        padding: 6px 8px;
+        border-bottom: 1px solid #334155;
+        color: #93c5fd;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .si-table td {
+        padding: 5px 8px;
+        border-bottom: 1px solid #1e293b;
+        vertical-align: top;
+      }
+      .si-row {
+        cursor: pointer;
+      }
+      .si-row:hover {
+        background: #1e293b;
+      }
+      .si-row--failed {
+        background: rgba(220, 38, 38, 0.08);
+        border-left: 3px solid #dc2626;
+      }
+      .si-row--failed:hover {
+        background: rgba(220, 38, 38, 0.15);
+      }
+      .si-mono {
+        font-family: monospace;
+      }
+      /* Status badges */
+      .si-badge {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .si-badge--pending {
+        background: #334155;
+        color: #94a3b8;
+      }
+      .si-badge--running {
+        background: #1d4ed8;
+        color: #bfdbfe;
+        animation: si-pulse 1.5s ease-in-out infinite;
+      }
+      @keyframes si-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+      }
+      .si-badge--completed {
+        background: #14532d;
+        color: #4ade80;
+      }
+      .si-badge--failed {
+        background: #7f1d1d;
+        color: #fca5a5;
+        font-weight: 700;
+      }
+      .si-badge--cancelled {
+        background: #78350f;
+        color: #fde68a;
+      }
+      /* Retry / fallback indicators */
+      .si-indicator {
+        display: inline-block;
+        font-size: 10px;
+        padding: 1px 4px;
+        border-radius: 3px;
+        font-family: monospace;
+      }
+      .si-indicator--retry {
+        background: #1e3a5f;
+        color: #93c5fd;
+      }
+      .si-indicator--fallback {
+        background: #3b1f5e;
+        color: #d8b4fe;
+      }
+      .si-detail-row td {
+        padding: 0;
+      }
+      .si-detail-row {
+        display: none;
+      }
+      .si-detail-row--expanded {
+        display: table-row;
+      }
+      .si-detail {
+        padding: 12px 16px;
+        background: #0d1724;
+        border-left: 3px solid #334155;
+      }
+      .si-detail-error {
+        color: #fca5a5;
+        margin-bottom: 10px;
+        padding: 8px 10px;
+        background: rgba(220, 38, 38, 0.12);
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      .si-detail-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .si-detail-col {
+        min-width: 180px;
+        flex: 1;
+      }
+      .si-detail-label {
+        color: #93c5fd;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 4px;
+      }
+      .si-detail-pre {
+        background: #111827;
+        border: 1px solid #334155;
+        border-radius: 4px;
+        padding: 6px 8px;
+        font-size: 11px;
+        max-height: 150px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 0;
+      }
+      .si-detail-meta {
+        font-size: 12px;
+        font-family: monospace;
+        line-height: 1.7;
+      }
+      .si-artifact-id {
+        background: #1e293b;
+        border-radius: 3px;
+        padding: 1px 5px;
+        font-size: 11px;
+        color: #93c5fd;
+        display: inline-block;
+        margin: 1px 0;
+      }
+      .si-empty {
+        color: #64748b;
+        font-size: 12px;
+        padding: 12px 0;
+        font-family: monospace;
+      }
+      /* Runtime Event Timeline panel */
+      .ret-filters {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+      .ret-filters input,
+      .ret-filters select {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 4px;
+        color: #e2e8f0;
+        font-size: 12px;
+        padding: 4px 8px;
+        font-family: monospace;
+      }
+      .ret-filters input::placeholder {
+        color: #64748b;
+      }
+      .ret-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .ret-table th {
+        text-align: left;
+        padding: 6px 8px;
+        border-bottom: 1px solid #334155;
+        color: #93c5fd;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .ret-table td {
+        padding: 5px 8px;
+        border-bottom: 1px solid #1e293b;
+        vertical-align: top;
+      }
+      .ret-row {
+        cursor: pointer;
+      }
+      .ret-row:hover {
+        background: #1e293b;
+      }
+      .ret-row--failed {
+        background: rgba(220, 38, 38, 0.08);
+        border-left: 3px solid #dc2626;
+      }
+      .ret-row--failed:hover {
+        background: rgba(220, 38, 38, 0.15);
+      }
+      .ret-mono {
+        font-family: monospace;
+      }
+      /* Event type badges */
+      .ret-badge {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+      .ret-badge--green {
+        background: #14532d;
+        color: #4ade80;
+      }
+      .ret-badge--red {
+        background: #7f1d1d;
+        color: #fca5a5;
+      }
+      .ret-badge--yellow {
+        background: #78350f;
+        color: #fde68a;
+      }
+      .ret-badge--blue {
+        background: #1e3a5f;
+        color: #93c5fd;
+      }
+      .ret-badge--gray {
+        background: #334155;
+        color: #94a3b8;
+      }
+      .ret-corr-link {
+        cursor: pointer;
+        color: #93c5fd;
+        text-decoration: underline;
+        font-family: monospace;
+        font-size: 11px;
+        background: none;
+        border: none;
+        padding: 0;
+      }
+      .ret-corr-link:hover {
+        color: #bfdbfe;
+      }
+      .ret-detail-row td {
+        padding: 0;
+      }
+      .ret-detail-row {
+        display: none;
+      }
+      .ret-detail-row--expanded {
+        display: table-row;
+      }
+      .ret-detail {
+        padding: 12px 16px;
+        background: #0d1724;
+        border-left: 3px solid #334155;
+      }
+      .ret-detail-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .ret-detail-col {
+        min-width: 180px;
+        flex: 1;
+      }
+      .ret-detail-label {
+        color: #93c5fd;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 4px;
+      }
+      .ret-detail-pre {
+        background: #111827;
+        border: 1px solid #334155;
+        border-radius: 4px;
+        padding: 6px 8px;
+        font-size: 11px;
+        max-height: 150px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 0;
+      }
+      .ret-detail-meta {
+        font-size: 12px;
+        font-family: monospace;
+        line-height: 1.7;
+      }
+      .ret-empty {
+        color: #64748b;
+        font-size: 12px;
+        padding: 12px 0;
+        font-family: monospace;
+      }
+      /* Execution Trace view */
+      .ret-trace-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .ret-trace-title {
+        font-size: 13px;
+        font-weight: 600;
+        font-family: monospace;
+        color: #e2e8f0;
+      }
+      .ret-back-btn {
+        cursor: pointer;
+        color: #93c5fd;
+        background: none;
+        border: none;
+        font-size: 12px;
+        padding: 0;
+        text-decoration: underline;
+      }
+      .ret-back-btn:hover {
+        color: #bfdbfe;
+      }
+      .ret-chain {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .ret-chain-step {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 8px 10px;
+        background: #111827;
+        border: 1px solid #334155;
+        border-radius: 6px;
+      }
+      .ret-chain-step--failed {
+        border-color: #dc2626;
+        background: rgba(220, 38, 38, 0.08);
+      }
+      .ret-chain-connector {
+        color: #334155;
+        font-size: 16px;
+        text-align: center;
+        padding-left: 14px;
+        line-height: 1;
+      }
+      .ret-chain-status {
+        font-size: 14px;
+        width: 18px;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .ret-chain-status--ok { color: #4ade80; }
+      .ret-chain-status--fail { color: #fca5a5; }
+      .ret-chain-status--prog { color: #93c5fd; }
+      .ret-chain-body {
+        flex: 1;
+        font-size: 12px;
+        font-family: monospace;
+      }
+      .ret-chain-type {
+        font-weight: 600;
+        color: #e2e8f0;
+      }
+      .ret-chain-meta {
+        color: #64748b;
+        font-size: 11px;
+      }
+      .ret-chain-error {
+        color: #fca5a5;
+        font-size: 11px;
+        margin-top: 4px;
+        padding: 4px 6px;
+        background: rgba(220, 38, 38, 0.1);
+        border-radius: 3px;
+      }
+      .ret-chain-warning {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: rgba(251, 191, 36, 0.08);
+        border: 1px solid #d97706;
+        border-radius: 6px;
+        color: #fde68a;
+        font-size: 12px;
+        font-family: monospace;
+        margin-top: 4px;
+      }
+      /* Workspace Package Management panel */
+      .gm-filters {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+      .gm-filters input,
+      .gm-filters select {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 4px;
+        color: #e2e8f0;
+        font-size: 12px;
+        padding: 4px 8px;
+        font-family: monospace;
+      }
+      .gm-filters input::placeholder {
+        color: #64748b;
+      }
+      .gm-section-title {
+        color: #93c5fd;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin: 16px 0 8px;
+      }
+      .gm-section-title:first-of-type {
+        margin-top: 0;
+      }
+      .gm-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .gm-table th {
+        text-align: left;
+        padding: 6px 8px;
+        border-bottom: 1px solid #334155;
+        color: #93c5fd;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .gm-table td {
+        padding: 5px 8px;
+        border-bottom: 1px solid #1e293b;
+        vertical-align: top;
+      }
+      .gm-row {
+        cursor: pointer;
+      }
+      .gm-row:hover {
+        background: #1e293b;
+      }
+      .gm-mono {
+        font-family: monospace;
+      }
+      /* Package status badges */
+      .gm-badge {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .gm-badge--available {
+        background: #334155;
+        color: #94a3b8;
+      }
+      .gm-badge--installing {
+        background: #1d4ed8;
+        color: #bfdbfe;
+        animation: gm-pulse 1.5s ease-in-out infinite;
+      }
+      .gm-badge--installed {
+        background: #1e3a5f;
+        color: #93c5fd;
+      }
+      .gm-badge--enabled {
+        background: #14532d;
+        color: #4ade80;
+      }
+      .gm-badge--disabled {
+        background: #78350f;
+        color: #fde68a;
+      }
+      .gm-badge--uninstalling {
+        background: #4c1d95;
+        color: #ddd6fe;
+        animation: gm-pulse 1.5s ease-in-out infinite;
+      }
+      .gm-badge--failed {
+        background: #7f1d1d;
+        color: #fca5a5;
+        font-weight: 700;
+      }
+      .gm-badge--skill {
+        background: #1e3a5f;
+        color: #93c5fd;
+      }
+      .gm-badge--agent {
+        background: #14532d;
+        color: #4ade80;
+      }
+      .gm-badge--blueprint {
+        background: #4c1d95;
+        color: #ddd6fe;
+      }
+      @keyframes gm-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+      }
+      /* Action buttons */
+      .gm-btn {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        border: 1px solid #334155;
+        background: #1e293b;
+        color: #e2e8f0;
+        font-family: monospace;
+        margin-right: 4px;
+      }
+      .gm-btn:hover {
+        background: #334155;
+      }
+      .gm-btn--install {
+        border-color: #93c5fd;
+        color: #93c5fd;
+      }
+      .gm-btn--install:hover {
+        background: #1e3a5f;
+      }
+      .gm-btn--enable {
+        border-color: #4ade80;
+        color: #4ade80;
+      }
+      .gm-btn--enable:hover {
+        background: #14532d;
+      }
+      .gm-btn--disable {
+        border-color: #fde68a;
+        color: #fde68a;
+      }
+      .gm-btn--disable:hover {
+        background: #78350f;
+      }
+      .gm-btn--uninstall {
+        border-color: #fca5a5;
+        color: #fca5a5;
+      }
+      .gm-btn--uninstall:hover {
+        background: #7f1d1d;
+      }
+      .gm-btn--update {
+        border-color: #ddd6fe;
+        color: #ddd6fe;
+      }
+      .gm-btn--update:hover {
+        background: #4c1d95;
+      }
+      /* Detail rows */
+      .gm-detail-row td {
+        padding: 0;
+      }
+      .gm-detail-row {
+        display: none;
+      }
+      .gm-detail-row--expanded {
+        display: table-row;
+      }
+      .gm-detail {
+        padding: 12px 16px;
+        background: #0d1724;
+        border-left: 3px solid #334155;
+      }
+      .gm-detail-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .gm-detail-col {
+        min-width: 180px;
+        flex: 1;
+      }
+      .gm-detail-label {
+        color: #93c5fd;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 4px;
+      }
+      .gm-detail-pre {
+        background: #111827;
+        border: 1px solid #334155;
+        border-radius: 4px;
+        padding: 6px 8px;
+        font-size: 11px;
+        max-height: 120px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 0;
+      }
+      .gm-detail-meta {
+        font-size: 12px;
+        font-family: monospace;
+        line-height: 1.7;
+      }
+      .gm-detail-tag {
+        display: inline-block;
+        background: #1e293b;
+        border-radius: 3px;
+        padding: 1px 5px;
+        font-size: 11px;
+        color: #93c5fd;
+        margin: 1px 2px 1px 0;
+        font-family: monospace;
+      }
+      /* Error banner */
+      .gm-error-banner {
+        display: none;
+        color: #fca5a5;
+        margin-bottom: 10px;
+        padding: 8px 10px;
+        background: rgba(220, 38, 38, 0.12);
+        border-radius: 4px;
+        font-size: 12px;
+        border-left: 3px solid #dc2626;
+      }
+      .gm-error-banner--visible {
+        display: block;
+      }
+      .gm-empty {
+        color: #64748b;
+        font-size: 12px;
+        padding: 12px 0;
+        font-family: monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>GhostClaw Runtime Dashboard</h1>
+    <div id="meta" class="meta">Loading...</div>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Runtime Status</h2>
+        <pre id="runtime-status">Loading...</pre>
+      </section>
+
+      <section class="panel">
+        <h2>Queue</h2>
+        <pre id="queue">Loading...</pre>
+      </section>
+
+      <section class="panel">
+        <h2>Agents</h2>
+        <pre id="agents">Loading...</pre>
+      </section>
+
+      <section class="panel">
+        <h2>Artifacts</h2>
+        <pre id="artifacts">Loading...</pre>
+      </section>
+
+      <section class="panel">
+        <h2>Planner Strategies</h2>
+        <pre id="planner-strategies">Loading...</pre>
+      </section>
+
+      <section class="panel panel-full">
+        <h2>Skill Invocations</h2>
+        <div class="si-filters">
+          <input type="text" id="si-filter-workspace" placeholder="Workspace" />
+          <input type="text" id="si-filter-agent" placeholder="Agent" />
+          <input type="text" id="si-filter-skill" placeholder="Skill" />
+          <select id="si-filter-status">
+            <option value="">All Statuses</option>
+            <option value="pending">pending</option>
+            <option value="running">running</option>
+            <option value="completed">completed</option>
+            <option value="failed">failed</option>
+            <option value="cancelled">cancelled</option>
+          </select>
+        </div>
+        <div id="skill-invocations">Loading...</div>
+      </section>
+
+      <section class="panel panel-full">
+        <h2>Workspace Package Management</h2>
+        <div class="gm-filters">
+          <input type="text" id="gm-filter-workspace" placeholder="Workspace ID" />
+          <select id="gm-filter-type">
+            <option value="">All Types</option>
+            <option value="skill">skill</option>
+            <option value="agent">agent</option>
+            <option value="blueprint">blueprint</option>
+          </select>
+          <select id="gm-filter-status">
+            <option value="">All Statuses</option>
+            <option value="available">available</option>
+            <option value="installed">installed</option>
+            <option value="enabled">enabled</option>
+            <option value="disabled">disabled</option>
+            <option value="failed">failed</option>
+          </select>
+        </div>
+        <div id="gm-error-banner" class="gm-error-banner"></div>
+        <div class="gm-section-title">Available Packages</div>
+        <div id="gm-available-packages">Loading...</div>
+        <div class="gm-section-title">Workspace Installed Packages</div>
+        <div id="gm-workspace-packages"><div class="gm-empty">Enter a Workspace ID above to view installed packages.</div></div>
+      </section>
+
+      <section class="panel panel-full">
+        <h2>Runtime Event Timeline</h2>
+        <div id="ret-timeline-view">
+          <div class="ret-filters">
+            <input type="text" id="ret-filter-workspace" placeholder="Workspace" />
+            <select id="ret-filter-event-type">
+              <option value="">All Event Types</option>
+              <option value="signal.received">signal.received</option>
+              <option value="plan.created">plan.created</option>
+              <option value="job.queued">job.queued</option>
+              <option value="job.assigned">job.assigned</option>
+              <option value="skill.invocation.started">skill.invocation.started</option>
+              <option value="skill.invocation.completed">skill.invocation.completed</option>
+              <option value="skill.invocation.failed">skill.invocation.failed</option>
+              <option value="artifact.created">artifact.created</option>
+              <option value="publish.requested">publish.requested</option>
+              <option value="publish.completed">publish.completed</option>
+              <option value="audit.logged">audit.logged</option>
+            </select>
+            <input type="text" id="ret-filter-job-id" placeholder="Job ID" />
+            <input type="text" id="ret-filter-skill-inv-id" placeholder="Skill Invocation ID" />
+            <input type="text" id="ret-filter-correlation-id" placeholder="Correlation ID" />
+          </div>
+          <div id="ret-events">Loading...</div>
+        </div>
+        <div id="ret-trace-view" style="display:none"></div>
+      </section>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
