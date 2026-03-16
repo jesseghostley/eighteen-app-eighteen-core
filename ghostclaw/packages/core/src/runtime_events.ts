@@ -8,6 +8,7 @@ import type { WorkerNode } from './worker_node';
 import type { WorkerBackendManifest } from './worker_backend_manifest';
 import type { CompatibilityCheckResult } from './package_compatibility';
 import type { BlueprintLaunchReadinessResult } from './blueprint_launch_readiness';
+import type { BlueprintLaunchPlan } from './blueprint_launch_planner';
 
 /**
  * RuntimeEventMap — strongly-typed mapping of every runtime lifecycle event
@@ -97,4 +98,9 @@ export interface RuntimeEventMap {
   'blueprint.launch_readiness.failed': BlueprintLaunchReadinessResult;
   /** Blueprint launch readiness check satisfied — ready to launch. */
   'blueprint.launch_readiness.satisfied': BlueprintLaunchReadinessResult;
+
+  // ── Blueprint launch planner lifecycle ────────────────────────────────────
+
+  /** Blueprint launch plan created. */
+  'blueprint.launch_plan.created': BlueprintLaunchPlan;
 }
