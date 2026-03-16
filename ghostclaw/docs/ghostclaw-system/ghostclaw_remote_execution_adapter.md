@@ -120,14 +120,131 @@ interface IRemoteExecutionAdapter {
 |------------------------|--------------------------------------------|
 | `LocalStubAdapter`     | In-process stub for testing/development    |
 | `FailingStubAdapter`   | Always-failing stub for error path testing |
+| `PopeClawAdapter`      | Pope-Claw-backed remote execution          |
 
-### Future Adapters (not in this pass)
+### Future Adapters
 
 | Adapter                      | Backend                               |
 |------------------------------|---------------------------------------|
-| `GitHubActionsAdapter`       | Pope-Claw pattern via repository dispatch |
 | `ContainerSandboxAdapter`    | Docker/OCI container execution        |
 | `SSHNodeAdapter`             | Remote node via SSH                   |
+
+---
+
+## Pope-Claw Adapter
+
+### Overview
+
+The `PopeClawRemoteExecutionAdapter` is a real remote execution backend modeled
+after the Pope-Claw bridge pattern from Eighteen Core.  It exercises the full
+dispatch → poll/callback → result lifecycle while remaining provider-agnostic.
+
+Unlike the `LocalStubAdapter` (which executes in-process), the Pope-Claw adapter
+models a two-phase async execution flow:
+
+1. **Dispatch** — send the request to a remote execution environment
+2. **Await** — poll or receive a callback when execution completes
+
+This separation is critical for production use with GitHub Actions, SSH nodes,
+or container runtimes where execution is inherently asynchronous.
+
+### How It Differs from LocalStubAdapter
+
+| Aspect | LocalStubAdapter | PopeClawAdapter |
+|--------|-----------------|-----------------|
+| **Execution** | In-process, synchronous simulation | Two-phase: dispatch + await via `IPopeClawDispatcher` |
+| **Backend** | None (echoes input) | Pluggable dispatcher (simulated, GitHub Actions, SSH, container) |
+| **Retry** | No retry logic | Automatic retry with exponential backoff for transient failures |
+| **Failure classification** | Not applicable | Classifies failures as transient vs permanent |
+| **Configuration** | None | Full config: endpoint, audit ref, workflow ID, timeout, callback, retry policy |
+| **Execution type validation** | Accepts all types | Validates against `supported_execution_types` in config |
+| **Audit detail** | Basic lifecycle entries | Rich metadata: remote_endpoint, commit_sha, failure_classification, retry attempts |
+| **Use case** | Unit tests, contract verification | Integration testing, staging, production |
+
+### Architecture
+
+```
+GhostClaw Runtime
+  └─ SkillInvocation
+       └─ PopeClawRemoteExecutionAdapter
+            ├─ Policy gate (reject if not approved)
+            ├─ Execution type validation
+            ├─ IPopeClawDispatcher.dispatch()      ← pluggable backend
+            │    ├─ SimulatedDispatcher (testing)
+            │    ├─ GitHubActionsDispatcher (future)
+            │    ├─ SSHDispatcher (future)
+            │    └─ ContainerDispatcher (future)
+            ├─ IPopeClawDispatcher.awaitResult()
+            ├─ Failure classification (transient / permanent)
+            ├─ Auto-retry with exponential backoff
+            ├─ EventBus emission at every stage
+            └─ AuditLog entries at every stage
+```
+
+### Configuration
+
+```typescript
+type PopeClawAdapterConfig = {
+  name: string;                          // Adapter instance name
+  remote_endpoint: string;               // Target: "owner/repo", "user@host", etc.
+  audit_ref: string;                     // Audit branch: "audit/main"
+  workflow_id: string;                   // Workflow: "pope-claw-exec.yml"
+  callback_url: string;                  // Callback endpoint (placeholder)
+  callback_secret: string;               // HMAC secret (placeholder)
+  timeout_ms: number;                    // Max wait time (default: 120000)
+  retry_policy: {
+    max_retries: number;                 // Max auto-retries (default: 2)
+    backoff_ms: number[];                // Backoff intervals: [30000, 90000]
+  };
+  supported_execution_types: RemoteExecutionType[];  // What this adapter handles
+};
+```
+
+All configuration boundaries are placeholders in this pass.  No real network
+calls, GitHub API tokens, or webhook secrets are required.
+
+### Failure Classification
+
+Ported from Eighteen Core's `error-recovery.ts`:
+
+| Pattern | Classification | Behavior |
+|---------|---------------|----------|
+| `network`, `timeout`, `ECONNRESET` | Transient | Auto-retry with backoff |
+| `rate limit`, `429`, `503` | Transient | Auto-retry with backoff |
+| `runner unavailable` | Transient | Auto-retry with backoff |
+| Everything else | Permanent | Fail immediately, no retry |
+
+### Dispatcher Interface
+
+The adapter delegates actual remote communication to an `IPopeClawDispatcher`:
+
+```typescript
+interface IPopeClawDispatcher {
+  dispatch(config, request): Promise<{ remote_run_id: string }>;
+  awaitResult(config, request, remoteRunId): Promise<{
+    success: boolean;
+    stdout: string;
+    stderr: string;
+    exit_code: number;
+    commit_sha?: string;
+  }>;
+}
+```
+
+**V1 Dispatchers:**
+
+| Dispatcher | Behavior |
+|-----------|----------|
+| `SimulatedPopeClawDispatcher` | Returns simulated output per execution type |
+| `SimulatedPopeClawDispatcher(true, msg)` | Always fails with given message |
+
+**Future Dispatchers** (not in this pass):
+
+| Dispatcher | Backend |
+|-----------|---------|
+| `GitHubActionsDispatcher` | Octokit → repository_dispatch → poll/callback |
+| `SSHDispatcher` | SSH exec + SCP for artifacts |
+| `ContainerDispatcher` | Docker/OCI run + volume mount |
 
 ## Storage
 
@@ -163,4 +280,6 @@ chain: Signal → Plan → Job → Assignment → SkillInvocation → RemoteExec
 | `packages/core/src/storage/interfaces/IRemoteExecutionStore.ts` | Store interface |
 | `packages/core/src/runtime_events.ts` | RuntimeEventMap (extended) |
 | `packages/core/src/audit_log.ts` | AuditEventType (extended) |
-| `__tests__/remote_execution.test.ts` | Test suite (25 tests) |
+| `packages/core/src/pope_claw_adapter.ts` | Pope-Claw adapter, config, dispatcher, failure classification |
+| `__tests__/remote_execution.test.ts` | LocalStub/FailingStub test suite (25 tests) |
+| `__tests__/pope_claw_adapter.test.ts` | Pope-Claw adapter test suite (34 tests) |
