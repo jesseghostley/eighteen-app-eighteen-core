@@ -57,7 +57,10 @@ export type AuditEventType =
   | 'remote_execution.rejected'
   | 'worker.registered'
   | 'worker.unregistered'
-  | 'worker.offline';
+  | 'worker.offline'
+  | 'worker_backend.registered'
+  | 'worker_backend.unregistered'
+  | 'worker_backend.updated';
 
 export type AuditLogEntry = {
   /** Globally unique identifier. MUST be immutable after creation. */

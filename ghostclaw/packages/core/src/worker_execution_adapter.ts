@@ -4,6 +4,7 @@ import type {
   RemoteExecutionResult,
 } from './remote_execution';
 import type { WorkerRegistry } from './worker_node';
+import type { WorkerBackendRegistry } from './worker_backend_manifest';
 import { WorkerSelector } from './worker_selector';
 
 // ── Worker-Aware Execution Adapter ──────────────────────────────────────────
@@ -13,21 +14,24 @@ import { WorkerSelector } from './worker_selector';
  * uses the WorkerSelector to route RemoteExecutionRequests to the appropriate
  * worker backend.
  *
- * This adapter extends the runtime cleanly: it implements IRemoteExecutionAdapter
- * so it can be used anywhere a standard adapter is expected, but internally it
- * selects a worker, increments/decrements load, and delegates to the worker's
- * execution backend adapter.
+ * When a WorkerBackendRegistry is provided, the adapter validates that the
+ * selected worker's backend has a registered manifest and that the manifest
+ * supports the requested execution type before delegating.
+ *
+ * This adapter implements IRemoteExecutionAdapter so it can be used anywhere
+ * a standard adapter is expected.
  */
 export class WorkerExecutionAdapter implements IRemoteExecutionAdapter {
   readonly name = 'worker-execution-adapter';
 
   private readonly selector: WorkerSelector;
-  private readonly backends = new Map<string, IRemoteExecutionAdapter>();
+  private readonly adapters = new Map<string, IRemoteExecutionAdapter>();
 
   constructor(
     private readonly registry: WorkerRegistry,
+    private readonly backendRegistry?: WorkerBackendRegistry,
   ) {
-    this.selector = new WorkerSelector(registry);
+    this.selector = new WorkerSelector(registry, backendRegistry);
   }
 
   /**
@@ -35,7 +39,7 @@ export class WorkerExecutionAdapter implements IRemoteExecutionAdapter {
    * Workers reference backends by their execution_backend field.
    */
   registerBackend(name: string, adapter: IRemoteExecutionAdapter): void {
-    this.backends.set(name, adapter);
+    this.adapters.set(name, adapter);
   }
 
   async submit(request: RemoteExecutionRequest): Promise<RemoteExecutionRequest> {
@@ -44,6 +48,7 @@ export class WorkerExecutionAdapter implements IRemoteExecutionAdapter {
       execution_type: request.execution_type,
       required_capabilities: request.requested_capabilities,
       skill_invocation_id: request.skill_invocation_id,
+      workspace_id: request.workspace_id,
     });
 
     if (!result.worker) {
@@ -53,7 +58,7 @@ export class WorkerExecutionAdapter implements IRemoteExecutionAdapter {
     }
 
     const worker = result.worker;
-    const backend = this.backends.get(worker.execution_backend);
+    const backend = this.adapters.get(worker.execution_backend);
 
     if (!backend) {
       request.status = 'rejected';
@@ -74,7 +79,7 @@ export class WorkerExecutionAdapter implements IRemoteExecutionAdapter {
 
   async getStatus(requestId: string): Promise<RemoteExecutionRequest | undefined> {
     // Delegate to all backends (first match wins)
-    for (const backend of this.backends.values()) {
+    for (const backend of this.adapters.values()) {
       const status = await backend.getStatus(requestId);
       if (status) {
         return status;
@@ -84,7 +89,7 @@ export class WorkerExecutionAdapter implements IRemoteExecutionAdapter {
   }
 
   async getResult(requestId: string): Promise<RemoteExecutionResult | undefined> {
-    for (const backend of this.backends.values()) {
+    for (const backend of this.adapters.values()) {
       const result = await backend.getResult(requestId);
       if (result) {
         return result;
@@ -94,7 +99,7 @@ export class WorkerExecutionAdapter implements IRemoteExecutionAdapter {
   }
 
   async cancel(requestId: string): Promise<boolean> {
-    for (const backend of this.backends.values()) {
+    for (const backend of this.adapters.values()) {
       const cancelled = await backend.cancel(requestId);
       if (cancelled) {
         return true;

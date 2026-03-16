@@ -5,6 +5,7 @@ import type { AuditLogEntry } from './audit_log';
 import type { WorkspaceInstallRecord } from './ghost_mart_workspace_install';
 import type { RemoteExecutionRequest, RemoteExecutionResult } from './remote_execution';
 import type { WorkerNode } from './worker_node';
+import type { WorkerBackendManifest } from './worker_backend_manifest';
 
 /**
  * RuntimeEventMap — strongly-typed mapping of every runtime lifecycle event
@@ -69,4 +70,13 @@ export interface RuntimeEventMap {
   'worker.offline': WorkerNode;
   /** Worker node selected for a skill invocation. */
   'worker.selected': WorkerNode;
+
+  // ── Worker backend manifest lifecycle ─────────────────────────────────────
+
+  /** Worker backend manifest registered. */
+  'worker_backend.registered': WorkerBackendManifest;
+  /** Worker backend manifest unregistered. */
+  'worker_backend.unregistered': WorkerBackendManifest;
+  /** Worker backend manifest updated. */
+  'worker_backend.updated': WorkerBackendManifest;
 }
