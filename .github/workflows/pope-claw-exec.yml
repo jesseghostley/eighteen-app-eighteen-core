@@ -7,16 +7,142 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      TOOL: ${{ github.event.client_payload.tool }}
+      SESSION_ID: ${{ github.event.client_payload.sessionId }}
     steps:
       - uses: actions/checkout@v4
-      - name: Execute task
-        run: echo "${{ github.event.client_payload.task }}"
-      - name: Log to PROJECT-LOG
+
+      - name: Decode arguments
+        id: args
         run: |
-          echo "## $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> PROJECT-LOG.md
-          echo "Task: ${{ github.event.client_payload.task }}" >> PROJECT-LOG.md
+          # client_payload.args is a JSON object — extract fields as needed
+          echo '${{ toJson(github.event.client_payload.args) }}' > /tmp/args.json
+          echo "args_file=/tmp/args.json" >> "$GITHUB_OUTPUT"
+
+      - name: Execute tool
+        id: tool
+        run: |
+          set -euo pipefail
+          mkdir -p workspace
+
+          case "$TOOL" in
+            bash)
+              COMMAND=$(jq -r '.command // empty' /tmp/args.json)
+              if [ -z "$COMMAND" ]; then
+                echo "error=Missing required arg: command" >> "$GITHUB_OUTPUT"
+                exit 1
+              fi
+              echo "Running command: $COMMAND"
+              bash -c "$COMMAND" > workspace/output.txt 2>&1 || {
+                EXIT_CODE=$?
+                echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+                echo "Command exited with code $EXIT_CODE"
+              }
+              ;;
+
+            write)
+              FILE_PATH=$(jq -r '.path // empty' /tmp/args.json)
+              CONTENT=$(jq -r '.content // empty' /tmp/args.json)
+              if [ -z "$FILE_PATH" ]; then
+                echo "error=Missing required arg: path" >> "$GITHUB_OUTPUT"
+                exit 1
+              fi
+              mkdir -p "$(dirname "$FILE_PATH")"
+              echo "$CONTENT" > "$FILE_PATH"
+              echo "Wrote $(wc -c < "$FILE_PATH") bytes to $FILE_PATH" > workspace/output.txt
+              ;;
+
+            edit)
+              FILE_PATH=$(jq -r '.path // empty' /tmp/args.json)
+              OLD_STRING=$(jq -r '.old_string // empty' /tmp/args.json)
+              NEW_STRING=$(jq -r '.new_string // empty' /tmp/args.json)
+              if [ -z "$FILE_PATH" ] || [ -z "$OLD_STRING" ]; then
+                echo "error=Missing required args: path, old_string" >> "$GITHUB_OUTPUT"
+                exit 1
+              fi
+              if [ ! -f "$FILE_PATH" ]; then
+                echo "error=File not found: $FILE_PATH" >> "$GITHUB_OUTPUT"
+                exit 1
+              fi
+              # Use awk for safe find/replace (handles special chars better than sed)
+              awk -v old="$OLD_STRING" -v new="$NEW_STRING" '{gsub(old,new)}1' "$FILE_PATH" > "${FILE_PATH}.tmp"
+              mv "${FILE_PATH}.tmp" "$FILE_PATH"
+              echo "Edited $FILE_PATH: replaced occurrence(s)" > workspace/output.txt
+              ;;
+
+            apply_patch)
+              PATCH=$(jq -r '.patch // empty' /tmp/args.json)
+              if [ -z "$PATCH" ]; then
+                echo "error=Missing required arg: patch" >> "$GITHUB_OUTPUT"
+                exit 1
+              fi
+              echo "$PATCH" > /tmp/patch.diff
+              git apply /tmp/patch.diff 2>&1 | tee workspace/output.txt
+              echo "Patch applied successfully" >> workspace/output.txt
+              ;;
+
+            *)
+              echo "Unknown tool: $TOOL" > workspace/output.txt
+              echo "error=Unknown tool: $TOOL" >> "$GITHUB_OUTPUT"
+              exit 1
+              ;;
+          esac
+
+      - name: Commit changes and output
+        run: |
           git config user.name "pope-claw"
           git config user.email "pope-claw@eighteen.ai"
+
+          # Stage any file changes from write/edit/apply_patch/bash
+          git add -A
+
+          # Always write output artifact
+          if [ -f workspace/output.txt ]; then
+            git add workspace/output.txt
+          fi
+
+          # Append to audit log
+          echo "" >> PROJECT-LOG.md
+          echo "## $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> PROJECT-LOG.md
+          echo "- **Tool:** \`$TOOL\`" >> PROJECT-LOG.md
+          echo "- **Session:** \`$SESSION_ID\`" >> PROJECT-LOG.md
+          if [ -f workspace/output.txt ]; then
+            echo "- **Output:**" >> PROJECT-LOG.md
+            echo '```' >> PROJECT-LOG.md
+            head -50 workspace/output.txt >> PROJECT-LOG.md
+            echo '```' >> PROJECT-LOG.md
+          fi
           git add PROJECT-LOG.md
-          git commit -m "Log: ${{ github.event.client_payload.task }}" || true
-          git push || true
+
+          git diff --cached --quiet || {
+            git commit -m "pope-claw: ${TOOL} [session:${SESSION_ID}]"
+            git push
+          }
+
+      - name: Post callback
+        if: always()
+        run: |
+          CALLBACK_URL="${{ github.event.client_payload.callbackUrl }}"
+          if [ -n "$CALLBACK_URL" ]; then
+            OUTPUT=""
+            if [ -f workspace/output.txt ]; then
+              OUTPUT=$(cat workspace/output.txt | head -c 4000)
+            fi
+            ERROR="${{ steps.tool.outputs.error }}"
+            SUCCESS="true"
+            if [ -n "$ERROR" ]; then
+              SUCCESS="false"
+            fi
+            curl -s -X POST "$CALLBACK_URL" \
+              -H "Content-Type: application/json" \
+              -H "X-Hub-Signature-256: $(echo -n "{}" | openssl dgst -sha256 -hmac "${POPE_CLAW_WEBHOOK_SECRET:-}" | cut -d' ' -f2)" \
+              -d "{
+                \"sessionId\": \"$SESSION_ID\",
+                \"tool\": \"$TOOL\",
+                \"success\": $SUCCESS,
+                \"output\": $(echo "$OUTPUT" | jq -Rs .),
+                \"runId\": ${{ github.run_id }},
+                \"commitSha\": \"$(git rev-parse HEAD)\"
+              }" || echo "Callback failed (non-fatal)"
+          fi

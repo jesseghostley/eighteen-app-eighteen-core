@@ -7,7 +7,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/gateway/server.js",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "tsc -p tsconfig.test.json && node dist-test/tests/tools.test.js && node dist-test/tests/router.test.js && node dist-test/tests/error-recovery.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
