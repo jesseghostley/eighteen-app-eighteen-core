@@ -9,6 +9,7 @@ import type { WorkerBackendManifest } from './worker_backend_manifest';
 import type { CompatibilityCheckResult } from './package_compatibility';
 import type { BlueprintLaunchReadinessResult } from './blueprint_launch_readiness';
 import type { BlueprintLaunchPlan } from './blueprint_launch_planner';
+import type { BlueprintLaunchExecution, BlueprintLaunchStepExecution } from './blueprint_launcher';
 
 /**
  * RuntimeEventMap — strongly-typed mapping of every runtime lifecycle event
@@ -103,4 +104,21 @@ export interface RuntimeEventMap {
 
   /** Blueprint launch plan created. */
   'blueprint.launch_plan.created': BlueprintLaunchPlan;
+
+  // ── Blueprint launch execution lifecycle ──────────────────────────────────
+
+  /** Blueprint launch execution started. */
+  'blueprint.launch.started': BlueprintLaunchExecution;
+  /** Blueprint launch step started. */
+  'blueprint.launch.step.started': { execution: BlueprintLaunchExecution; step: BlueprintLaunchStepExecution };
+  /** Blueprint launch step completed. */
+  'blueprint.launch.step.completed': { execution: BlueprintLaunchExecution; step: BlueprintLaunchStepExecution };
+  /** Blueprint launch step failed. */
+  'blueprint.launch.step.failed': { execution: BlueprintLaunchExecution; step: BlueprintLaunchStepExecution };
+  /** Blueprint launch execution completed. */
+  'blueprint.launch.completed': BlueprintLaunchExecution;
+  /** Blueprint launch execution failed. */
+  'blueprint.launch.failed': BlueprintLaunchExecution;
+  /** Blueprint launch execution cancelled. */
+  'blueprint.launch.cancelled': BlueprintLaunchExecution;
 }

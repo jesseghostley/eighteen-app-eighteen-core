@@ -66,7 +66,14 @@ export type AuditEventType =
   | 'package.compatibility.satisfied'
   | 'blueprint.launch_readiness.failed'
   | 'blueprint.launch_readiness.satisfied'
-  | 'blueprint.launch_plan.created';
+  | 'blueprint.launch_plan.created'
+  | 'blueprint.launch.started'
+  | 'blueprint.launch.step.started'
+  | 'blueprint.launch.step.completed'
+  | 'blueprint.launch.step.failed'
+  | 'blueprint.launch.completed'
+  | 'blueprint.launch.failed'
+  | 'blueprint.launch.cancelled';
 
 export type AuditLogEntry = {
   /** Globally unique identifier. MUST be immutable after creation. */
