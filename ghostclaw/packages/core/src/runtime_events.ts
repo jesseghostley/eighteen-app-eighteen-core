@@ -4,6 +4,7 @@ import type { PublishEvent } from './publish_event';
 import type { AuditLogEntry } from './audit_log';
 import type { WorkspaceInstallRecord } from './ghost_mart_workspace_install';
 import type { RemoteExecutionRequest, RemoteExecutionResult } from './remote_execution';
+import type { WorkerNode } from './worker_node';
 
 /**
  * RuntimeEventMap — strongly-typed mapping of every runtime lifecycle event
@@ -57,4 +58,15 @@ export interface RuntimeEventMap {
   'remote.execution.completed': RemoteExecutionResult;
   /** Remote execution failed. */
   'remote.execution.failed': RemoteExecutionResult;
+
+  // ── Worker node lifecycle ───────────────────────────────────────────────
+
+  /** Worker node registered with the registry. */
+  'worker.registered': WorkerNode;
+  /** Worker node heartbeat received. */
+  'worker.heartbeat': WorkerNode;
+  /** Worker node went offline (missed heartbeat or explicit). */
+  'worker.offline': WorkerNode;
+  /** Worker node selected for a skill invocation. */
+  'worker.selected': WorkerNode;
 }
