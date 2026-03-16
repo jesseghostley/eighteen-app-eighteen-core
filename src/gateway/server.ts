@@ -14,6 +14,7 @@ import { createWebhookRouter } from "../pope-claw/webhook-server";
 import { createPopeClawBridge } from "../pope-claw/index";
 import { createTelegramBot } from "../channels/telegram";
 import { loadSoul } from "./soul-loader";
+import { startHeartbeat } from "./heartbeat";
 
 const PORT = parseInt(process.env.EIGHTEEN_PORT || "3000", 10);
 
@@ -60,6 +61,9 @@ export async function startGateway(): Promise<void> {
   } else {
     console.log("[gateway] No TELEGRAM_BOT_TOKEN — Telegram disabled");
   }
+
+  // Start heartbeat scheduler
+  startHeartbeat({ gatewayPort: PORT });
 
   console.log("[gateway] Eighteen Core is running");
 }

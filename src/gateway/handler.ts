@@ -12,7 +12,7 @@ import { executeLocalTool } from "../tools/index";
 import { handleFailure, fetchRunLogs } from "../pope-claw/error-recovery";
 import { loadConfig } from "../pope-claw/index";
 import { SoulIdentity } from "./soul-loader";
-import { callAgent } from "../providers/anthropic";
+import { createProvider, LLMProvider } from "../providers/index";
 
 export interface HandlerConfig {
   bridge: PopeClawRouter | null;
@@ -31,6 +31,7 @@ export type MessageHandler = (ctx: MessageContext) => Promise<void>;
 /** Create the main message handler */
 export function createHandler(config: HandlerConfig): MessageHandler {
   const { bridge, soul } = config;
+  const provider = createProvider();
 
   return async (ctx: MessageContext): Promise<void> => {
     const { text, sessionId, sendReply } = ctx;
@@ -42,7 +43,7 @@ export function createHandler(config: HandlerConfig): MessageHandler {
 
     try {
       // Send to LLM and get response (may include tool calls)
-      const response = await callAgent({
+      const response = await provider.callAgent({
         systemPrompt,
         userMessage: text,
         sessionId,

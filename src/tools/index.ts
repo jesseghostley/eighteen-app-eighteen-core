@@ -5,8 +5,7 @@
  * - read: Read file contents
  * - grep: Search file contents
  * - glob: Find files by pattern
- * - web_search: Search the web
- * - message: Send a message to a channel
+ * - web_search: Search the web (via Brave Search API)
  *
  * Remote tools (exec, bash, write, edit, apply_patch) are handled
  * by the Pope-Claw bridge and never reach this module.
@@ -51,12 +50,25 @@ export function getToolDefinitions(): ToolDefinition[] {
       },
     },
     {
+      name: "glob",
+      description: "Find files matching a glob pattern",
+      input_schema: {
+        type: "object",
+        properties: {
+          pattern: { type: "string", description: "Glob pattern (e.g. **/*.ts, src/**/*.json)" },
+          path: { type: "string", description: "Base directory to search in (default: current directory)" },
+        },
+        required: ["pattern"],
+      },
+    },
+    {
       name: "web_search",
-      description: "Search the web for information",
+      description: "Search the web for information using Brave Search",
       input_schema: {
         type: "object",
         properties: {
           query: { type: "string", description: "Search query" },
+          count: { type: "number", description: "Number of results (default 5, max 20)" },
         },
         required: ["query"],
       },
@@ -98,6 +110,17 @@ export function getToolDefinitions(): ToolDefinition[] {
         required: ["path", "old_string", "new_string"],
       },
     },
+    {
+      name: "apply_patch",
+      description: "Apply a git patch (runs in GitHub Actions sandbox)",
+      input_schema: {
+        type: "object",
+        properties: {
+          patch: { type: "string", description: "Git-format patch content" },
+        },
+        required: ["patch"],
+      },
+    },
   ];
 }
 
@@ -111,6 +134,8 @@ export function executeLocalTool(
       return toolRead(args);
     case "grep":
       return toolGrep(args);
+    case "glob":
+      return toolGlob(args);
     case "web_search":
       return toolWebSearch(args);
     default:
@@ -160,12 +185,76 @@ function toolGrep(args: Record<string, unknown>): ToolCallResult {
   }
 }
 
-function toolWebSearch(_args: Record<string, unknown>): ToolCallResult {
-  // Placeholder — web search requires an API integration
-  return {
-    tool: "web_search",
-    success: false,
-    output: "",
-    error: "Web search not yet implemented. Configure a search API provider.",
-  };
+function toolGlob(args: Record<string, unknown>): ToolCallResult {
+  const pattern = args.pattern as string;
+  const basePath = (args.path as string) || ".";
+
+  try {
+    const { execSync } = require("child_process");
+    // Use find with shell glob expansion for cross-platform compatibility
+    const output = execSync(
+      `find "${basePath}" -type f -name "${pattern}" 2>/dev/null | head -200 | sort`,
+      { encoding: "utf-8", maxBuffer: 1024 * 1024 }
+    );
+    const files = output.trim();
+    return {
+      tool: "glob",
+      success: true,
+      output: files || "(no matches)",
+    };
+  } catch (err) {
+    return {
+      tool: "glob",
+      success: false,
+      output: "",
+      error: `Glob failed: ${err}`,
+    };
+  }
+}
+
+function toolWebSearch(args: Record<string, unknown>): ToolCallResult {
+  const query = args.query as string;
+  const count = Math.min((args.count as number) || 5, 20);
+
+  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
+  if (!apiKey) {
+    return {
+      tool: "web_search",
+      success: false,
+      output: "",
+      error: "BRAVE_SEARCH_API_KEY not configured. Set it in .env to enable web search.",
+    };
+  }
+
+  // Use synchronous HTTP via child_process to keep the tool interface simple
+  try {
+    const { execSync } = require("child_process");
+    const encodedQuery = encodeURIComponent(query);
+    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodedQuery}&count=${count}`;
+    const response = execSync(
+      `curl -s -H "Accept: application/json" -H "X-Subscription-Token: ${apiKey}" "${url}"`,
+      { encoding: "utf-8", maxBuffer: 2 * 1024 * 1024, timeout: 15000 }
+    );
+
+    const data = JSON.parse(response);
+    if (data.web?.results) {
+      const results = data.web.results.map((r: { title: string; url: string; description: string }) =>
+        `**${r.title}**\n${r.url}\n${r.description}`
+      ).join("\n\n");
+      return { tool: "web_search", success: true, output: results };
+    }
+
+    return {
+      tool: "web_search",
+      success: true,
+      output: data.query?.altered ? `No results. Did you mean: ${data.query.altered}` : "(no results)",
+    };
+  } catch (err) {
+    return {
+      tool: "web_search",
+      success: false,
+      output: "",
+      error: `Web search failed: ${err}`,
+    };
+  }
 }
