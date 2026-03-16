@@ -73,7 +73,12 @@ export type AuditEventType =
   | 'blueprint.launch.step.failed'
   | 'blueprint.launch.completed'
   | 'blueprint.launch.failed'
-  | 'blueprint.launch.cancelled';
+  | 'blueprint.launch.cancelled'
+  | 'job.lease.claimed'
+  | 'job.lease.renewed'
+  | 'job.lease.released'
+  | 'job.lease.expired'
+  | 'job.lease.reclaimed';
 
 export type AuditLogEntry = {
   /** Globally unique identifier. MUST be immutable after creation. */

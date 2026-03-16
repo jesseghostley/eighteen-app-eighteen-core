@@ -10,6 +10,7 @@ import type { CompatibilityCheckResult } from './package_compatibility';
 import type { BlueprintLaunchReadinessResult } from './blueprint_launch_readiness';
 import type { BlueprintLaunchPlan } from './blueprint_launch_planner';
 import type { BlueprintLaunchExecution, BlueprintLaunchStepExecution } from './blueprint_launcher';
+import type { JobLease } from './job_lease';
 
 /**
  * RuntimeEventMap — strongly-typed mapping of every runtime lifecycle event
@@ -121,4 +122,17 @@ export interface RuntimeEventMap {
   'blueprint.launch.failed': BlueprintLaunchExecution;
   /** Blueprint launch execution cancelled. */
   'blueprint.launch.cancelled': BlueprintLaunchExecution;
+
+  // ── Job lease lifecycle ───────────────────────────────────────────────────
+
+  /** Worker claimed a lease on a job. */
+  'job.lease.claimed': JobLease;
+  /** Worker renewed an active lease. */
+  'job.lease.renewed': JobLease;
+  /** Worker released a lease (job done). */
+  'job.lease.released': JobLease;
+  /** Lease expired (worker presumed dead). */
+  'job.lease.expired': JobLease;
+  /** Job reclaimed by a new worker after lease expiry. */
+  'job.lease.reclaimed': JobLease;
 }
