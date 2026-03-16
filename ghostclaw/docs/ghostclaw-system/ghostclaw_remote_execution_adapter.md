@@ -116,10 +116,21 @@ interface IRemoteExecutionAdapter {
 
 ### V1 Adapters
 
-| Adapter                | Purpose                                    |
-|------------------------|--------------------------------------------|
-| `LocalStubAdapter`     | In-process stub for testing/development    |
-| `FailingStubAdapter`   | Always-failing stub for error path testing |
+| Adapter                              | Purpose                                                       |
+|--------------------------------------|---------------------------------------------------------------|
+| `LocalStubAdapter`                   | In-process stub for testing/development                       |
+| `FailingStubAdapter`                 | Always-failing stub for error path testing                    |
+| `PopeClawRemoteExecutionAdapter`     | Policy-aware, provider-agnostic adapter backed by Pope-Claw   |
+
+### Simulated Dispatchers (for PopeClawRemoteExecutionAdapter testing)
+
+| Dispatcher                            | Purpose                                                    |
+|---------------------------------------|------------------------------------------------------------|
+| `SimulatedSuccessDispatcher`          | Always succeeds (happy path testing)                       |
+| `SimulatedFailureDispatcher`          | Always fails (error path testing)                          |
+| `SimulatedTransientFailureDispatcher` | Fails N times then succeeds (retry logic testing)          |
+| `SimulatedPermanentFailureDispatcher` | Always fails with permanent error (no-retry testing)       |
+| `SimulatedControlledDispatcher`       | Manual control of execution behavior (scenario testing)    |
 
 ### Future Adapters (not in this pass)
 
@@ -128,6 +139,50 @@ interface IRemoteExecutionAdapter {
 | `GitHubActionsAdapter`       | Pope-Claw pattern via repository dispatch |
 | `ContainerSandboxAdapter`    | Docker/OCI container execution        |
 | `SSHNodeAdapter`             | Remote node via SSH                   |
+
+## PopeClawRemoteExecutionAdapter
+
+The `PopeClawRemoteExecutionAdapter` is a feature-rich, policy-aware implementation of
+`IRemoteExecutionAdapter` suitable for production use or as a template for custom adapters.
+
+### Key Features
+
+- **Policy Gate Enforcement**: Validates `policy_context.approved === true` before dispatch; rejects with `'rejected'` status otherwise.
+- **Execution Type Whitelisting**: Optionally restricts allowed execution types per adapter instance.
+- **Retry Classification + Exponential Backoff**: Automatically classifies errors as transient or permanent and retries transient failures with configurable backoff.
+- **Full Audit Trail**: Emits comprehensive audit events (via `auditLog`) for all state transitions.
+- **Runtime Events**: Emits events on the canonical `EventBus` for integration with runtime subscribers.
+- **Chain Traceability**: Preserves `workspace_id`, `job_id`, `assignment_id`, and `skill_invocation_id` through the entire lifecycle.
+- **Audit Metadata**: Captures `remote_run_id`, dispatcher name, retry attempt count, and execution timing in audit records.
+
+### Configuration
+
+```typescript
+const adapter = new PopeClawRemoteExecutionAdapter({
+  name: 'pope-claw-instance-1',
+  dispatcher: someDispatcherImpl,
+  retryPolicy: {
+    maxRetries: 3,
+    initialBackoffMs: 100,
+    maxBackoffMs: 10000,
+    backoffMultiplier: 2,
+    classifyError: (error) => { /* return 'transient' | 'permanent' | 'unknown' */ },
+  },
+  executionTypeWhitelist: {
+    allowedTypes: ['shell_command', 'file_write'], // Empty array = allow all
+  },
+});
+```
+
+### Dispatcher Contract
+
+Implementations of `IPopeClawDispatcher` must:
+1. Accept a `RemoteExecutionRequest` and dispatch it to a backend.
+2. Return a provider-specific `remote_run_id` (string).
+3. Throw an error if dispatch fails (transient or permanent).
+4. Implement `getExecutionStatus()` to poll for completion.
+5. Implement `getExecutionResult()` to retrieve stdout, stderr, exit code, and error.
+6. Implement `cancel()` to attempt cancellation.
 
 ## Storage
 
