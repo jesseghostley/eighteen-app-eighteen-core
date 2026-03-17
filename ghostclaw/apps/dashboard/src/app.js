@@ -9,6 +9,8 @@ const sections = {
   plannerStrategies: document.getElementById('planner-strategies'),
   approvals: document.getElementById('approvals'),
   approvalsCount: document.getElementById('approvals-count'),
+  approvalHistory: document.getElementById('approval-history'),
+  historyCount: document.getElementById('history-count'),
   skillInvocations: document.getElementById('skill-invocations'),
   meta: document.getElementById('meta'),
   retEvents: document.getElementById('ret-events'),
@@ -862,6 +864,20 @@ async function handleApprovalAction(id, action) {
       let errMsg = `HTTP ${response.status}`;
       try { const b = await response.json(); if (b && b.error) errMsg = b.error; } catch (_) {}
       alert(`${action} failed: ${errMsg}`);
+      refreshDashboard();
+      return;
+    }
+    // After approve, automatically trigger publish
+    if (action === 'approve') {
+      const pubResponse = await fetch(`${API_BASE}/api/approvals/${encodeURIComponent(id)}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!pubResponse.ok) {
+        let errMsg = `HTTP ${pubResponse.status}`;
+        try { const b = await pubResponse.json(); if (b && b.error) errMsg = b.error; } catch (_) {}
+        alert(`Publish after approve failed: ${errMsg}`);
+      }
     }
   } catch (err) {
     alert(`${action} failed: ${err.message}`);
@@ -879,6 +895,58 @@ sections.approvals.addEventListener('click', (e) => {
   siblingBtns.forEach((b) => { b.disabled = true; b.style.opacity = '0.5'; });
   handleApprovalAction(btn.dataset.apprId, btn.dataset.apprAction);
 });
+
+function renderHistory(data) {
+  const el = sections.approvalHistory;
+  if (!el) return;
+  el.classList.remove('error');
+
+  const items = data.items || [];
+  const count = data.count || 0;
+
+  if (sections.historyCount) {
+    sections.historyCount.textContent = `(${count})`;
+  }
+
+  if (items.length === 0) {
+    el.innerHTML = '<div style="color:#64748b;font-size:12px;font-family:monospace;padding:12px 0">No approval history yet.</div>';
+    return;
+  }
+
+  const statusColors = { published: '#4ade80', approved: '#93c5fd', rejected: '#f87171' };
+
+  const rows = items.map((item) => {
+    const ts = item.publishedAt ? new Date(item.publishedAt).toLocaleString() : '\u2014';
+    const approvedAt = item.approvedAt ? new Date(item.approvedAt).toLocaleString() : '\u2014';
+    const color = statusColors[item.status] || '#64748b';
+    const statusBadge = `<span style="background:${color}20;color:${color};padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600">${escapeHtml(item.status)}</span>`;
+    const url = item.externalUrl ? `<a href="${escapeHtml(item.externalUrl)}" target="_blank" style="color:#93c5fd;font-size:11px">${escapeHtml(item.externalUrl)}</a>` : '\u2014';
+    return `<tr>
+  <td class="si-mono">${escapeHtml(item.id || '')}</td>
+  <td class="si-mono">${escapeHtml(item.artifactId || '')}</td>
+  <td>${escapeHtml(item.destination || '')}</td>
+  <td>${statusBadge}</td>
+  <td>${escapeHtml(item.approvedBy || item.publishedBy || '')}</td>
+  <td class="si-mono">${escapeHtml(approvedAt)}</td>
+  <td>${url}</td>
+</tr>`;
+  }).join('');
+
+  el.innerHTML = `<table class="si-table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Artifact</th>
+      <th>Destination</th>
+      <th>Status</th>
+      <th>Acted By</th>
+      <th>Resolved At</th>
+      <th>URL</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>`;
+}
 
 function renderJson(element, data) {
   element.classList.remove('error');
@@ -909,12 +977,13 @@ async function refreshDashboard() {
     { key: 'plannerStrategies', path: '/api/runtime/planner-strategies' },
   ];
 
-  const [results, siResults, retResults, gmResults, approvalResults] = await Promise.all([
+  const [results, siResults, retResults, gmResults, approvalResults, historyResults] = await Promise.all([
     Promise.allSettled(requests.map((request) => fetchJson(request.path))),
     Promise.allSettled([fetchJson('/api/skill-invocations')]),
     Promise.allSettled([fetchRuntimeEvents()]),
     Promise.allSettled([gmFetchAvailable(), gmFetchWorkspacePackages()]),
     Promise.allSettled([fetchJson('/api/approvals/pending')]),
+    Promise.allSettled([fetchJson('/api/approvals/history')]),
   ]);
 
   let hadError = false;
@@ -947,6 +1016,16 @@ async function refreshDashboard() {
     renderError(
       sections.approvals,
       `Failed to fetch /api/approvals/pending: ${approvalResults[0].reason?.message ?? 'Unknown error'}`,
+    );
+  }
+
+  if (historyResults[0].status === 'fulfilled') {
+    renderHistory(historyResults[0].value);
+  } else {
+    hadError = true;
+    renderError(
+      sections.approvalHistory,
+      `Failed to fetch /api/approvals/history: ${historyResults[0].reason?.message ?? 'Unknown error'}`,
     );
   }
 
