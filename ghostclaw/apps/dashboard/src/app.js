@@ -7,6 +7,8 @@ const sections = {
   agents: document.getElementById('agents'),
   artifacts: document.getElementById('artifacts'),
   plannerStrategies: document.getElementById('planner-strategies'),
+  approvals: document.getElementById('approvals'),
+  approvalsCount: document.getElementById('approvals-count'),
   skillInvocations: document.getElementById('skill-invocations'),
   meta: document.getElementById('meta'),
   retEvents: document.getElementById('ret-events'),
@@ -799,6 +801,51 @@ document.getElementById('gm-filter-status').addEventListener('change', (e) => {
   renderGmAvailablePackages(gmAvailableData);
 });
 
+function renderApprovals(data) {
+  const el = sections.approvals;
+  if (!el) return;
+  el.classList.remove('error');
+
+  const items = data.pending || [];
+  const count = data.count || 0;
+
+  if (sections.approvalsCount) {
+    sections.approvalsCount.textContent = `(${count})`;
+  }
+
+  if (items.length === 0) {
+    el.innerHTML = '<div style="color:#64748b;font-size:12px;font-family:monospace;padding:12px 0">No pending approvals.</div>';
+    return;
+  }
+
+  const rows = items.map((item) => {
+    const ts = item.publishedAt ? new Date(item.publishedAt).toLocaleString() : '\u2014';
+    const statusBadge = `<span class="si-badge si-badge--${escapeHtml(item.status || 'pending')}">${escapeHtml(item.status || 'pending')}</span>`;
+    return `<tr>
+  <td class="si-mono">${escapeHtml(item.id || '')}</td>
+  <td class="si-mono">${escapeHtml(item.artifactId || '')}</td>
+  <td>${escapeHtml(item.destination || '')}</td>
+  <td>${statusBadge}</td>
+  <td>${escapeHtml(item.publishedBy || '')}</td>
+  <td class="si-mono">${escapeHtml(ts)}</td>
+</tr>`;
+  }).join('');
+
+  el.innerHTML = `<table class="si-table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Artifact</th>
+      <th>Destination</th>
+      <th>Status</th>
+      <th>Published By</th>
+      <th>Published At</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>`;
+}
+
 function renderJson(element, data) {
   element.classList.remove('error');
   element.textContent = JSON.stringify(data, null, 2);
@@ -828,11 +875,12 @@ async function refreshDashboard() {
     { key: 'plannerStrategies', path: '/api/runtime/planner-strategies' },
   ];
 
-  const [results, siResults, retResults, gmResults] = await Promise.all([
+  const [results, siResults, retResults, gmResults, approvalResults] = await Promise.all([
     Promise.allSettled(requests.map((request) => fetchJson(request.path))),
     Promise.allSettled([fetchJson('/api/skill-invocations')]),
     Promise.allSettled([fetchRuntimeEvents()]),
     Promise.allSettled([gmFetchAvailable(), gmFetchWorkspacePackages()]),
+    Promise.allSettled([fetchJson('/api/approvals/pending')]),
   ]);
 
   let hadError = false;
@@ -855,6 +903,16 @@ async function refreshDashboard() {
     renderError(
       sections.skillInvocations,
       `Failed to fetch /api/skill-invocations: ${siResults[0].reason?.message ?? 'Unknown error'}`,
+    );
+  }
+
+  if (approvalResults[0].status === 'fulfilled') {
+    renderApprovals(approvalResults[0].value);
+  } else {
+    hadError = true;
+    renderError(
+      sections.approvals,
+      `Failed to fetch /api/approvals/pending: ${approvalResults[0].reason?.message ?? 'Unknown error'}`,
     );
   }
 
@@ -887,3 +945,7 @@ async function refreshDashboard() {
 
 refreshDashboard();
 setInterval(refreshDashboard, REFRESH_MS);
+
+document.getElementById('btn-refresh').addEventListener('click', () => {
+  refreshDashboard();
+});
