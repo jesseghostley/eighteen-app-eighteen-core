@@ -7,6 +7,9 @@ const sections = {
   agents: document.getElementById('agents'),
   artifacts: document.getElementById('artifacts'),
   plannerStrategies: document.getElementById('planner-strategies'),
+  batchList: document.getElementById('batch-list'),
+  batchDetail: document.getElementById('batch-detail'),
+  batchCount: document.getElementById('batch-count'),
   approvals: document.getElementById('approvals'),
   approvalsCount: document.getElementById('approvals-count'),
   approvalHistory: document.getElementById('approval-history'),
@@ -803,6 +806,97 @@ document.getElementById('gm-filter-status').addEventListener('change', (e) => {
   renderGmAvailablePackages(gmAvailableData);
 });
 
+// --- Batch panel ---
+const batchStatusColors = {
+  queued: '#64748b', processing: '#facc15', awaiting_approval: '#f59e0b',
+  approved: '#93c5fd', published: '#4ade80', failed: '#f87171',
+};
+
+function renderBatchList(data) {
+  const el = sections.batchList;
+  if (!el) return;
+
+  const batches = data.batches || [];
+  if (sections.batchCount) sections.batchCount.textContent = `(${batches.length})`;
+
+  if (batches.length === 0) {
+    el.innerHTML = '<div style="color:#64748b;font-size:12px;font-family:monospace;padding:12px 0">No batches submitted.</div>';
+    return;
+  }
+
+  const rows = batches.map((b) => {
+    const ts = new Date(b.createdAt).toLocaleString();
+    const counts = Object.entries(b.statusCounts)
+      .filter(([, v]) => v > 0)
+      .map(([k, v]) => {
+        const c = batchStatusColors[k] || '#64748b';
+        return `<span style="background:${c}20;color:${c};padding:1px 7px;border-radius:3px;font-size:11px;font-weight:600">${v} ${k}</span>`;
+      })
+      .join(' ');
+    return `<tr class="batch-row" data-batch-id="${escapeHtml(b.id)}" style="cursor:pointer">
+  <td class="si-mono">${escapeHtml(b.id)}</td>
+  <td>${b.totalSites}</td>
+  <td>${b.processed}/${b.totalSites}</td>
+  <td>${counts}</td>
+  <td class="si-mono">${escapeHtml(ts)}</td>
+</tr>`;
+  }).join('');
+
+  el.innerHTML = `<table class="si-table">
+  <thead><tr><th>Batch ID</th><th>Sites</th><th>Processed</th><th>Status</th><th>Created</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table>`;
+}
+
+function renderBatchDetail(data) {
+  const el = sections.batchDetail;
+  if (!el) return;
+  el.style.display = '';
+
+  const sites = data.sites || [];
+  const rows = sites.map((s) => {
+    const c = batchStatusColors[s.status] || '#64748b';
+    const badge = `<span style="background:${c}20;color:${c};padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600">${escapeHtml(s.status)}</span>`;
+    const url = s.externalUrl
+      ? `<a href="${escapeHtml(s.externalUrl)}" target="_blank" style="color:#93c5fd;font-size:11px">${escapeHtml(s.externalUrl)}</a>`
+      : '\u2014';
+    const err = s.error ? `<span style="color:#f87171;font-size:11px">${escapeHtml(s.error)}</span>` : '';
+    return `<tr>
+  <td>${s.index}</td>
+  <td>${escapeHtml(s.businessName)}</td>
+  <td>${escapeHtml(s.trade)}</td>
+  <td>${escapeHtml(s.location)}</td>
+  <td>${badge}</td>
+  <td class="si-mono" style="font-size:11px">${s.publishEventIds.map(escapeHtml).join(', ') || '\u2014'}</td>
+  <td>${url}</td>
+  <td>${err}</td>
+</tr>`;
+  }).join('');
+
+  el.innerHTML = `<h3 style="margin-bottom:8px;font-size:14px">Batch: ${escapeHtml(data.id)} <button id="batch-close-btn" style="background:none;border:1px solid #334155;border-radius:4px;color:#93c5fd;font-size:11px;padding:2px 8px;cursor:pointer;margin-left:8px">Close</button></h3>
+<table class="si-table">
+  <thead><tr><th>#</th><th>Business</th><th>Trade</th><th>Location</th><th>Status</th><th>Publish Events</th><th>URL</th><th>Error</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table>`;
+
+  document.getElementById('batch-close-btn').addEventListener('click', () => { el.style.display = 'none'; });
+}
+
+let activeBatchId = null;
+
+sections.batchList.addEventListener('click', async (e) => {
+  const row = e.target.closest('tr.batch-row[data-batch-id]');
+  if (!row) return;
+  activeBatchId = row.dataset.batchId;
+  try {
+    const detail = await fetchJson(`/api/batches/${encodeURIComponent(activeBatchId)}`);
+    renderBatchDetail(detail);
+  } catch (err) {
+    sections.batchDetail.style.display = '';
+    sections.batchDetail.innerHTML = `<div class="error">Failed to load batch: ${escapeHtml(err.message)}</div>`;
+  }
+});
+
 function renderApprovals(data) {
   const el = sections.approvals;
   if (!el) return;
@@ -977,13 +1071,14 @@ async function refreshDashboard() {
     { key: 'plannerStrategies', path: '/api/runtime/planner-strategies' },
   ];
 
-  const [results, siResults, retResults, gmResults, approvalResults, historyResults] = await Promise.all([
+  const [results, siResults, retResults, gmResults, approvalResults, historyResults, batchResults] = await Promise.all([
     Promise.allSettled(requests.map((request) => fetchJson(request.path))),
     Promise.allSettled([fetchJson('/api/skill-invocations')]),
     Promise.allSettled([fetchRuntimeEvents()]),
     Promise.allSettled([gmFetchAvailable(), gmFetchWorkspacePackages()]),
     Promise.allSettled([fetchJson('/api/approvals/pending')]),
     Promise.allSettled([fetchJson('/api/approvals/history')]),
+    Promise.allSettled([fetchJson('/api/batches')]),
   ]);
 
   let hadError = false;
@@ -1027,6 +1122,19 @@ async function refreshDashboard() {
       sections.approvalHistory,
       `Failed to fetch /api/approvals/history: ${historyResults[0].reason?.message ?? 'Unknown error'}`,
     );
+  }
+
+  if (batchResults[0].status === 'fulfilled') {
+    renderBatchList(batchResults[0].value);
+    if (activeBatchId) {
+      try {
+        const detail = await fetchJson(`/api/batches/${encodeURIComponent(activeBatchId)}`);
+        renderBatchDetail(detail);
+      } catch (_) { /* keep stale detail */ }
+    }
+  } else {
+    hadError = true;
+    renderError(sections.batchList, `Failed to fetch /api/batches: ${batchResults[0].reason?.message ?? 'Unknown error'}`);
   }
 
   if (!retTraceMode) {
