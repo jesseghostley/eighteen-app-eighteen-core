@@ -821,6 +821,10 @@ function renderApprovals(data) {
   const rows = items.map((item) => {
     const ts = item.publishedAt ? new Date(item.publishedAt).toLocaleString() : '\u2014';
     const statusBadge = `<span class="si-badge si-badge--${escapeHtml(item.status || 'pending')}">${escapeHtml(item.status || 'pending')}</span>`;
+    const isPending = item.status === 'pending';
+    const actions = isPending
+      ? `<button class="si-badge si-badge--completed appr-btn" data-appr-id="${escapeHtml(item.id)}" data-appr-action="approve" style="cursor:pointer;border:none;margin-right:4px">Approve</button><button class="si-badge si-badge--failed appr-btn" data-appr-id="${escapeHtml(item.id)}" data-appr-action="reject" style="cursor:pointer;border:none">Reject</button>`
+      : `<span style="color:#64748b;font-size:11px">${escapeHtml(item.status)}</span>`;
     return `<tr>
   <td class="si-mono">${escapeHtml(item.id || '')}</td>
   <td class="si-mono">${escapeHtml(item.artifactId || '')}</td>
@@ -828,6 +832,7 @@ function renderApprovals(data) {
   <td>${statusBadge}</td>
   <td>${escapeHtml(item.publishedBy || '')}</td>
   <td class="si-mono">${escapeHtml(ts)}</td>
+  <td>${actions}</td>
 </tr>`;
   }).join('');
 
@@ -840,11 +845,40 @@ function renderApprovals(data) {
       <th>Status</th>
       <th>Published By</th>
       <th>Published At</th>
+      <th>Actions</th>
     </tr>
   </thead>
   <tbody>${rows}</tbody>
 </table>`;
 }
+
+async function handleApprovalAction(id, action) {
+  try {
+    const response = await fetch(`${API_BASE}/api/approvals/${encodeURIComponent(id)}/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      let errMsg = `HTTP ${response.status}`;
+      try { const b = await response.json(); if (b && b.error) errMsg = b.error; } catch (_) {}
+      alert(`${action} failed: ${errMsg}`);
+    }
+  } catch (err) {
+    alert(`${action} failed: ${err.message}`);
+  }
+  refreshDashboard();
+}
+
+sections.approvals.addEventListener('click', (e) => {
+  const btn = e.target.closest('button.appr-btn[data-appr-id]');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+  btn.textContent = btn.dataset.apprAction === 'approve' ? 'Approving\u2026' : 'Rejecting\u2026';
+  const siblingBtns = btn.parentElement.querySelectorAll('button.appr-btn');
+  siblingBtns.forEach((b) => { b.disabled = true; b.style.opacity = '0.5'; });
+  handleApprovalAction(btn.dataset.apprId, btn.dataset.apprAction);
+});
 
 function renderJson(element, data) {
   element.classList.remove('error');
