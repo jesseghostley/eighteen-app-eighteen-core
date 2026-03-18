@@ -10,10 +10,20 @@ import { SqliteJobStore } from '../../packages/core/src/storage/sqlite/SqliteJob
 import { SqliteSkillInvocationStore } from '../../packages/core/src/storage/sqlite/SqliteSkillInvocationStore';
 import { SqliteArtifactStore } from '../../packages/core/src/storage/sqlite/SqliteArtifactStore';
 import { SqliteAuditLogStore } from '../../packages/core/src/storage/sqlite/SqliteAuditLogStore';
+import { SqliteSignalStore } from '../../packages/core/src/storage/sqlite/SqliteSignalStore';
+import { SqlitePlanStore } from '../../packages/core/src/storage/sqlite/SqlitePlanStore';
+import { SqliteAssignmentStore } from '../../packages/core/src/storage/sqlite/SqliteAssignmentStore';
+import { SqlitePublishEventStore } from '../../packages/core/src/storage/sqlite/SqlitePublishEventStore';
+import { SqliteWorkspacePolicyStore } from '../../packages/core/src/storage/sqlite/SqliteWorkspacePolicyStore';
+import { SqliteRuntimeEventLogStore } from '../../packages/core/src/storage/sqlite/SqliteRuntimeEventLogStore';
 import type { QueueJob } from '../../packages/core/src/job_queue';
 import type { SkillInvocation } from '../../packages/core/src/skill_invocation';
-import type { Artifact } from '../../packages/core/src/runtime_loop';
+import type { Artifact, Signal, Plan } from '../../packages/core/src/runtime_loop';
 import type { AuditLogEntry } from '../../packages/core/src/audit_log';
+import type { Assignment } from '../../packages/core/src/assignment';
+import type { PublishEvent } from '../../packages/core/src/publish_event';
+import type { WorkspacePolicy } from '../../packages/core/src/workspace_policy';
+import type { RuntimeEventLogEntry } from '../../packages/core/src/runtime_event_log';
 
 function makeDb(): Database.Database {
   return new Database(path.join(os.tmpdir(), `ghostclaw-sqlite-test-${Date.now()}-${Math.random()}.db`));
@@ -316,5 +326,413 @@ describe('SqliteAuditLogStore', () => {
     store.append(makeAuditEntry());
     store.reset();
     expect(store.listAll()).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Factories for new stores
+// ---------------------------------------------------------------------------
+function makeSignal(overrides: Partial<Signal> = {}): Signal {
+  return {
+    id: 'signal_1',
+    name: 'test_signal',
+    createdAt: 1000,
+    ...overrides,
+  };
+}
+
+function makePlan(overrides: Partial<Plan> = {}): Plan {
+  return {
+    id: 'plan_1',
+    signalId: 'signal_1',
+    action: 'generate_content_cluster',
+    strategyId: 'strat_1',
+    strategyType: 'rule',
+    createdAt: 1000,
+    ...overrides,
+  };
+}
+
+function makeAssignment(overrides: Partial<Assignment> = {}): Assignment {
+  return {
+    id: 'assign_1',
+    jobId: 'job_1',
+    agentName: 'AgentX',
+    reason: 'best fit',
+    createdAt: 1000,
+    ...overrides,
+  };
+}
+
+function makePublishEvent(overrides: Partial<PublishEvent> = {}): PublishEvent {
+  return {
+    id: 'pub_1',
+    artifactId: 'artifact_1',
+    publishedAt: 1000,
+    destination: 'ghost_mart',
+    status: 'pending',
+    publishedBy: 'system',
+    ...overrides,
+  };
+}
+
+function makeWorkspacePolicy(overrides: Partial<WorkspacePolicy> = {}): WorkspacePolicy {
+  return {
+    id: 'policy_1',
+    workspaceId: 'ws_1',
+    policyType: 'execution',
+    name: 'Test Policy',
+    description: 'A test policy',
+    rules: { maxRetries: 3 },
+    status: 'active',
+    createdAt: 1000,
+    updatedAt: 1000,
+    ...overrides,
+  };
+}
+
+function makeRuntimeEventLogEntry(overrides: Partial<RuntimeEventLogEntry> = {}): RuntimeEventLogEntry {
+  return {
+    event_id: 'evt_1',
+    event_type: 'signal.received',
+    occurred_at: 1000,
+    payload: { name: 'test' },
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// SqliteSignalStore
+// ---------------------------------------------------------------------------
+describe('SqliteSignalStore', () => {
+  let store: SqliteSignalStore;
+
+  beforeEach(() => {
+    store = new SqliteSignalStore(makeDb());
+  });
+
+  it('creates and retrieves a signal', () => {
+    store.create(makeSignal());
+    expect(store.getById('signal_1')).toBeDefined();
+    expect(store.getById('signal_1')!.name).toBe('test_signal');
+  });
+
+  it('listAll returns all signals', () => {
+    store.create(makeSignal());
+    store.create(makeSignal({ id: 'signal_2', name: 'other' }));
+    expect(store.listAll()).toHaveLength(2);
+  });
+
+  it('serialises and deserialises payload', () => {
+    store.create(makeSignal({ payload: { nested: { value: 42 } } }));
+    const stored = store.getById('signal_1')!;
+    expect(stored.payload).toEqual({ nested: { value: 42 } });
+  });
+
+  it('handles undefined payload', () => {
+    store.create(makeSignal());
+    const stored = store.getById('signal_1')!;
+    expect(stored.payload).toBeUndefined();
+  });
+
+  it('reset clears all signals', () => {
+    store.create(makeSignal());
+    store.reset();
+    expect(store.listAll()).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SqlitePlanStore
+// ---------------------------------------------------------------------------
+describe('SqlitePlanStore', () => {
+  let store: SqlitePlanStore;
+
+  beforeEach(() => {
+    store = new SqlitePlanStore(makeDb());
+  });
+
+  it('creates and retrieves a plan', () => {
+    store.create(makePlan());
+    expect(store.getById('plan_1')).toBeDefined();
+    expect(store.getById('plan_1')!.action).toBe('generate_content_cluster');
+  });
+
+  it('listAll returns all plans', () => {
+    store.create(makePlan());
+    store.create(makePlan({ id: 'plan_2', signalId: 'signal_2' }));
+    expect(store.listAll()).toHaveLength(2);
+  });
+
+  it('listBySignalId filters correctly', () => {
+    store.create(makePlan({ id: 'plan_1', signalId: 'signal_1' }));
+    store.create(makePlan({ id: 'plan_2', signalId: 'signal_2' }));
+    expect(store.listBySignalId('signal_1')).toHaveLength(1);
+    expect(store.listBySignalId('signal_99')).toHaveLength(0);
+  });
+
+  it('preserves optional fields', () => {
+    store.create(makePlan({ priority: 5, requiredAgents: ['AgentA'], expectedOutputs: ['draft'] }));
+    const stored = store.getById('plan_1')!;
+    expect(stored.priority).toBe(5);
+    expect(stored.requiredAgents).toEqual(['AgentA']);
+    expect(stored.expectedOutputs).toEqual(['draft']);
+  });
+
+  it('reset clears all plans', () => {
+    store.create(makePlan());
+    store.reset();
+    expect(store.listAll()).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SqliteAssignmentStore
+// ---------------------------------------------------------------------------
+describe('SqliteAssignmentStore', () => {
+  let store: SqliteAssignmentStore;
+
+  beforeEach(() => {
+    store = new SqliteAssignmentStore(makeDb());
+  });
+
+  it('creates and retrieves an assignment', () => {
+    store.create(makeAssignment());
+    expect(store.getById('assign_1')).toBeDefined();
+    expect(store.getById('assign_1')!.agentName).toBe('AgentX');
+  });
+
+  it('listAll returns all assignments', () => {
+    store.create(makeAssignment());
+    store.create(makeAssignment({ id: 'assign_2', jobId: 'job_2' }));
+    expect(store.listAll()).toHaveLength(2);
+  });
+
+  it('listByJobId filters correctly', () => {
+    store.create(makeAssignment({ id: 'assign_1', jobId: 'job_1' }));
+    store.create(makeAssignment({ id: 'assign_2', jobId: 'job_2' }));
+    expect(store.listByJobId('job_1')).toHaveLength(1);
+    expect(store.listByJobId('job_99')).toHaveLength(0);
+  });
+
+  it('listByAgentName filters correctly', () => {
+    store.create(makeAssignment({ id: 'assign_1', agentName: 'AgentX' }));
+    store.create(makeAssignment({ id: 'assign_2', agentName: 'AgentY' }));
+    expect(store.listByAgentName('AgentX')).toHaveLength(1);
+    expect(store.listByAgentName('AgentZ')).toHaveLength(0);
+  });
+
+  it('revoke sets revokedAt and revokedReason', () => {
+    store.create(makeAssignment());
+    const revoked = store.revoke('assign_1', 2000, 'agent unavailable');
+    expect(revoked).toBeDefined();
+    expect(revoked!.revokedAt).toBe(2000);
+    expect(revoked!.revokedReason).toBe('agent unavailable');
+  });
+
+  it('revoke returns undefined for unknown id', () => {
+    expect(store.revoke('nope', 2000, 'reason')).toBeUndefined();
+  });
+
+  it('reset clears all assignments', () => {
+    store.create(makeAssignment());
+    store.reset();
+    expect(store.listAll()).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SqlitePublishEventStore
+// ---------------------------------------------------------------------------
+describe('SqlitePublishEventStore', () => {
+  let store: SqlitePublishEventStore;
+
+  beforeEach(() => {
+    store = new SqlitePublishEventStore(makeDb());
+  });
+
+  it('creates and retrieves a publish event', () => {
+    store.create(makePublishEvent());
+    expect(store.getById('pub_1')).toBeDefined();
+    expect(store.getById('pub_1')!.destination).toBe('ghost_mart');
+  });
+
+  it('listAll returns all events', () => {
+    store.create(makePublishEvent());
+    store.create(makePublishEvent({ id: 'pub_2', artifactId: 'artifact_2' }));
+    expect(store.listAll()).toHaveLength(2);
+  });
+
+  it('listByArtifactId filters correctly', () => {
+    store.create(makePublishEvent({ id: 'pub_1', artifactId: 'artifact_1' }));
+    store.create(makePublishEvent({ id: 'pub_2', artifactId: 'artifact_2' }));
+    expect(store.listByArtifactId('artifact_1')).toHaveLength(1);
+    expect(store.listByArtifactId('artifact_99')).toHaveLength(0);
+  });
+
+  it('listByStatus filters correctly', () => {
+    store.create(makePublishEvent({ id: 'pub_1', status: 'pending' }));
+    store.create(makePublishEvent({ id: 'pub_2', status: 'published' }));
+    expect(store.listByStatus('pending')).toHaveLength(1);
+    expect(store.listByStatus('published')).toHaveLength(1);
+    expect(store.listByStatus('failed')).toHaveLength(0);
+  });
+
+  it('updateStatus updates status and optional fields', () => {
+    store.create(makePublishEvent());
+    const updated = store.updateStatus('pub_1', 'approved', {
+      approvedBy: 'admin',
+      approvedAt: 2000,
+      externalUrl: 'https://example.com/page',
+    });
+    expect(updated!.status).toBe('approved');
+    expect(updated!.approvedBy).toBe('admin');
+    expect(updated!.approvedAt).toBe(2000);
+    expect(updated!.externalUrl).toBe('https://example.com/page');
+  });
+
+  it('updateStatus returns undefined for unknown id', () => {
+    expect(store.updateStatus('nope', 'published')).toBeUndefined();
+  });
+
+  it('reset clears all events', () => {
+    store.create(makePublishEvent());
+    store.reset();
+    expect(store.listAll()).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SqliteWorkspacePolicyStore
+// ---------------------------------------------------------------------------
+describe('SqliteWorkspacePolicyStore', () => {
+  let store: SqliteWorkspacePolicyStore;
+
+  beforeEach(() => {
+    store = new SqliteWorkspacePolicyStore(makeDb());
+  });
+
+  it('creates and retrieves a policy', () => {
+    store.create(makeWorkspacePolicy());
+    expect(store.getById('policy_1')).toBeDefined();
+    expect(store.getById('policy_1')!.name).toBe('Test Policy');
+  });
+
+  it('listAll returns all policies', () => {
+    store.create(makeWorkspacePolicy());
+    store.create(makeWorkspacePolicy({ id: 'policy_2', workspaceId: 'ws_2' }));
+    expect(store.listAll()).toHaveLength(2);
+  });
+
+  it('listByWorkspaceId filters correctly', () => {
+    store.create(makeWorkspacePolicy({ id: 'policy_1', workspaceId: 'ws_1' }));
+    store.create(makeWorkspacePolicy({ id: 'policy_2', workspaceId: 'ws_2' }));
+    expect(store.listByWorkspaceId('ws_1')).toHaveLength(1);
+    expect(store.listByWorkspaceId('ws_99')).toHaveLength(0);
+  });
+
+  it('listActive filters by status and optional policyType', () => {
+    store.create(makeWorkspacePolicy({ id: 'policy_1', status: 'active', policyType: 'execution' }));
+    store.create(makeWorkspacePolicy({ id: 'policy_2', status: 'inactive', policyType: 'publish' }));
+    store.create(makeWorkspacePolicy({ id: 'policy_3', status: 'active', policyType: 'publish' }));
+    expect(store.listActive('ws_1')).toHaveLength(2);
+    expect(store.listActive('ws_1', 'execution')).toHaveLength(1);
+    expect(store.listActive('ws_1', 'publish')).toHaveLength(1);
+  });
+
+  it('update modifies mutable fields', () => {
+    store.create(makeWorkspacePolicy());
+    const updated = store.update('policy_1', { name: 'Updated', updatedAt: 2000, enforcementMode: 'warn' });
+    expect(updated!.name).toBe('Updated');
+    expect(updated!.updatedAt).toBe(2000);
+    expect(updated!.enforcementMode).toBe('warn');
+  });
+
+  it('update returns undefined for unknown id', () => {
+    expect(store.update('nope', { updatedAt: 2000 })).toBeUndefined();
+  });
+
+  it('deactivate sets status to inactive', () => {
+    store.create(makeWorkspacePolicy());
+    const deactivated = store.deactivate('policy_1', 2000, 'admin');
+    expect(deactivated!.status).toBe('inactive');
+    expect(deactivated!.updatedBy).toBe('admin');
+  });
+
+  it('serialises and deserialises rules', () => {
+    store.create(makeWorkspacePolicy({ rules: { nested: { key: [1, 2, 3] } } }));
+    const stored = store.getById('policy_1')!;
+    expect(stored.rules).toEqual({ nested: { key: [1, 2, 3] } });
+  });
+
+  it('reset clears all policies', () => {
+    store.create(makeWorkspacePolicy());
+    store.reset();
+    expect(store.listAll()).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SqliteRuntimeEventLogStore
+// ---------------------------------------------------------------------------
+describe('SqliteRuntimeEventLogStore', () => {
+  let store: SqliteRuntimeEventLogStore;
+
+  beforeEach(() => {
+    store = new SqliteRuntimeEventLogStore(makeDb());
+  });
+
+  it('appends and retrieves an entry', () => {
+    store.append(makeRuntimeEventLogEntry());
+    expect(store.getById('evt_1')).toBeDefined();
+    expect(store.getById('evt_1')!.event_type).toBe('signal.received');
+  });
+
+  it('listRecent returns newest-first with limit', () => {
+    store.append(makeRuntimeEventLogEntry({ event_id: 'evt_1', occurred_at: 1000 }));
+    store.append(makeRuntimeEventLogEntry({ event_id: 'evt_2', occurred_at: 2000 }));
+    store.append(makeRuntimeEventLogEntry({ event_id: 'evt_3', occurred_at: 3000 }));
+    const recent = store.listRecent(2);
+    expect(recent).toHaveLength(2);
+    expect(recent[0].event_id).toBe('evt_3');
+    expect(recent[1].event_id).toBe('evt_2');
+  });
+
+  it('listByWorkspace filters correctly', () => {
+    store.append(makeRuntimeEventLogEntry({ event_id: 'evt_1', workspace_id: 'ws_1' }));
+    store.append(makeRuntimeEventLogEntry({ event_id: 'evt_2', workspace_id: 'ws_2' }));
+    expect(store.listByWorkspace('ws_1')).toHaveLength(1);
+    expect(store.listByWorkspace('ws_99')).toHaveLength(0);
+  });
+
+  it('listByJob filters correctly', () => {
+    store.append(makeRuntimeEventLogEntry({ event_id: 'evt_1', job_id: 'job_1' }));
+    store.append(makeRuntimeEventLogEntry({ event_id: 'evt_2', job_id: 'job_2' }));
+    expect(store.listByJob('job_1')).toHaveLength(1);
+  });
+
+  it('listBySkillInvocation filters correctly', () => {
+    store.append(makeRuntimeEventLogEntry({ event_id: 'evt_1', skill_invocation_id: 'inv_1' }));
+    expect(store.listBySkillInvocation('inv_1')).toHaveLength(1);
+    expect(store.listBySkillInvocation('inv_99')).toHaveLength(0);
+  });
+
+  it('listByCorrelationId filters correctly', () => {
+    store.append(makeRuntimeEventLogEntry({ event_id: 'evt_1', correlation_id: 'corr_1' }));
+    store.append(makeRuntimeEventLogEntry({ event_id: 'evt_2', correlation_id: 'corr_1' }));
+    store.append(makeRuntimeEventLogEntry({ event_id: 'evt_3', correlation_id: 'corr_2' }));
+    expect(store.listByCorrelationId('corr_1')).toHaveLength(2);
+  });
+
+  it('serialises and deserialises payload', () => {
+    store.append(makeRuntimeEventLogEntry({ payload: { deep: { nested: true } } }));
+    const stored = store.getById('evt_1')!;
+    expect(stored.payload).toEqual({ deep: { nested: true } });
+  });
+
+  it('reset clears all entries', () => {
+    store.append(makeRuntimeEventLogEntry());
+    store.reset();
+    expect(store.listRecent(100)).toHaveLength(0);
   });
 });
