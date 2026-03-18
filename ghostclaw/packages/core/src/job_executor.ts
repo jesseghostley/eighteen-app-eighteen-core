@@ -3,6 +3,7 @@ import { jobQueue } from './job_queue';
 import { skillInvocationStore } from './skill_invocation';
 import { assignmentStore } from './assignment';
 import { eventBus } from './event_bus';
+import { uniqueId } from './unique_id';
 import type { Artifact } from './runtime_loop';
 
 export type JobHandler = (inputPayload: Record<string, unknown>) => Record<string, unknown>;
@@ -44,7 +45,7 @@ export function executeJobs(): Artifact[] {
     eventBus.emit('job.assigned', { ...job, agentName: assignedAgent.agentName });
 
     // Create a first-class Assignment record for this job-to-agent binding.
-    const assignmentId = `assign_${job.id}`;
+    const assignmentId = uniqueId('assign');
     assignmentStore.create({
       id: assignmentId,
       jobId: job.id,
@@ -59,7 +60,7 @@ export function executeJobs(): Artifact[] {
       continue;
     }
 
-    const invocationId = `inv_${job.id}`;
+    const invocationId = uniqueId('inv');
 
     const invocation = skillInvocationStore.create({
       id: invocationId,
@@ -89,7 +90,7 @@ export function executeJobs(): Artifact[] {
       job.updatedAt = Date.now();
       jobQueue.markComplete(job.id);
 
-      const artifactId = `artifact_${job.id}`;
+      const artifactId = uniqueId('artifact');
       const completedAt = Date.now();
 
       skillInvocationStore.updateStatus(invocationId, 'completed', {

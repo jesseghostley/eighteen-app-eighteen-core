@@ -7,6 +7,7 @@ import { skillInvocationStore, type SkillInvocation } from './skill_invocation';
 import { assignmentStore, type Assignment } from './assignment';
 import { eventBus } from './event_bus';
 import { getStores } from './store_provider';
+import { uniqueId } from './unique_id';
 
 /**
  * =============================================================================
@@ -106,15 +107,11 @@ export const runtimeStore = {
   assignments: [] as Assignment[],
 };
 
-function nextId(prefix: string, index: number): string {
-  return `${prefix}_${index + 1}`;
-}
-
 function createPlan(signal: Signal): Plan {
   const decision = routeSignal(signal);
   const strategy = getPlannerStrategy(decision.strategyId);
   return {
-    id: nextId('plan', runtimeStore.plans.length),
+    id: uniqueId('plan'),
     signalId: signal.id,
     action: decision.plannerAction,
     strategyId: decision.strategyId,
@@ -135,7 +132,7 @@ function createJobs(plan: Plan, signal: Signal): Job[] {
   };
 
   return jobTypeByAction[plan.action].map((jobType, index) => ({
-    id: nextId('job', runtimeStore.jobs.length + index),
+    id: uniqueId('job'),
     planId: plan.id,
     jobType,
     assignedAgent: null,
@@ -166,7 +163,7 @@ export function processSignal(input: Pick<Signal, 'name' | 'payload'>): {
   const stores = getStores();
 
   const signal: Signal = {
-    id: nextId('signal', runtimeStore.signals.length),
+    id: uniqueId('signal'),
     name: input.name,
     payload: input.payload,
     createdAt: Date.now(),

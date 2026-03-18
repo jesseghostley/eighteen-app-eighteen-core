@@ -2,6 +2,7 @@ import type { IRuntimeEventLogStore } from './storage/interfaces/IRuntimeEventLo
 import type { EventBus } from './event_bus';
 import type { RuntimeEventMap } from './runtime_events';
 import { runtimeEventLog as defaultRuntimeEventLog } from './runtime_event_log';
+import { uniqueId } from './unique_id';
 
 /**
  * Registers subscribers that persist every RuntimeEventMap event as a
@@ -32,7 +33,7 @@ export function registerRuntimeEventLogSubscribers(
 
   bus.on('signal.received', (signal) => {
     store.append({
-      event_id: nextLogEntryId(),
+      event_id: uniqueId('el'),
       event_type: 'signal.received',
       occurred_at: Date.now(),
       signal_id: signal.id,
@@ -44,7 +45,7 @@ export function registerRuntimeEventLogSubscribers(
   bus.on('plan.created', (plan) => {
     planToSignal.set(plan.id, plan.signalId);
     store.append({
-      event_id: nextLogEntryId(),
+      event_id: uniqueId('el'),
       event_type: 'plan.created',
       occurred_at: Date.now(),
       plan_id: plan.id,
@@ -58,7 +59,7 @@ export function registerRuntimeEventLogSubscribers(
     const signalId = planToSignal.get(job.planId) ?? job.planId;
     jobToSignal.set(job.id, signalId);
     store.append({
-      event_id: nextLogEntryId(),
+      event_id: uniqueId('el'),
       event_type: 'job.queued',
       occurred_at: Date.now(),
       job_id: job.id,
@@ -72,7 +73,7 @@ export function registerRuntimeEventLogSubscribers(
   bus.on('job.assigned', (job) => {
     const signalId = jobToSignal.get(job.id) ?? planToSignal.get(job.planId) ?? job.planId;
     store.append({
-      event_id: nextLogEntryId(),
+      event_id: uniqueId('el'),
       event_type: 'job.assigned',
       occurred_at: Date.now(),
       job_id: job.id,
@@ -86,7 +87,7 @@ export function registerRuntimeEventLogSubscribers(
   bus.on('skill.invocation.started', (invocation) => {
     const signalId = jobToSignal.get(invocation.jobId) ?? planToSignal.get(invocation.planId) ?? invocation.planId;
     store.append({
-      event_id: nextLogEntryId(),
+      event_id: uniqueId('el'),
       event_type: 'skill.invocation.started',
       occurred_at: Date.now(),
       workspace_id: invocation.workspaceId,
@@ -103,7 +104,7 @@ export function registerRuntimeEventLogSubscribers(
   bus.on('skill.invocation.completed', (invocation) => {
     const signalId = jobToSignal.get(invocation.jobId) ?? planToSignal.get(invocation.planId) ?? invocation.planId;
     store.append({
-      event_id: nextLogEntryId(),
+      event_id: uniqueId('el'),
       event_type: 'skill.invocation.completed',
       occurred_at: Date.now(),
       workspace_id: invocation.workspaceId,
@@ -120,7 +121,7 @@ export function registerRuntimeEventLogSubscribers(
   bus.on('skill.invocation.failed', (invocation) => {
     const signalId = jobToSignal.get(invocation.jobId) ?? planToSignal.get(invocation.planId) ?? invocation.planId;
     store.append({
-      event_id: nextLogEntryId(),
+      event_id: uniqueId('el'),
       event_type: 'skill.invocation.failed',
       occurred_at: Date.now(),
       workspace_id: invocation.workspaceId,
@@ -138,7 +139,7 @@ export function registerRuntimeEventLogSubscribers(
     const signalId = jobToSignal.get(artifact.jobId) ?? artifact.jobId;
     artifactToSignal.set(artifact.id, signalId);
     store.append({
-      event_id: nextLogEntryId(),
+      event_id: uniqueId('el'),
       event_type: 'artifact.created',
       occurred_at: Date.now(),
       workspace_id: artifact.workspaceId,
@@ -154,7 +155,7 @@ export function registerRuntimeEventLogSubscribers(
   bus.on('publish.requested', (publishEvent) => {
     const signalId = artifactToSignal.get(publishEvent.artifactId) ?? publishEvent.artifactId;
     store.append({
-      event_id: nextLogEntryId(),
+      event_id: uniqueId('el'),
       event_type: 'publish.requested',
       occurred_at: Date.now(),
       publish_event_id: publishEvent.id,
@@ -168,7 +169,7 @@ export function registerRuntimeEventLogSubscribers(
   bus.on('publish.completed', (publishEvent) => {
     const signalId = artifactToSignal.get(publishEvent.artifactId) ?? publishEvent.artifactId;
     store.append({
-      event_id: nextLogEntryId(),
+      event_id: uniqueId('el'),
       event_type: 'publish.completed',
       occurred_at: Date.now(),
       publish_event_id: publishEvent.id,
@@ -181,7 +182,7 @@ export function registerRuntimeEventLogSubscribers(
 
   bus.on('audit.logged', (auditEntry) => {
     store.append({
-      event_id: nextLogEntryId(),
+      event_id: uniqueId('el'),
       event_type: 'audit.logged',
       occurred_at: Date.now(),
       workspace_id: auditEntry.workspaceId,
@@ -191,13 +192,7 @@ export function registerRuntimeEventLogSubscribers(
   });
 }
 
-let _eventLogEntryCounter = 0;
-
-function nextLogEntryId(): string {
-  return `el_${++_eventLogEntryCounter}`;
-}
-
-/** Resets the subscriber-side ID counter — for test isolation only. */
+/** Resets subscriber state — for test isolation only. No counters to reset since IDs are ULID-based. */
 export function resetEventLogSubscriberState(): void {
-  _eventLogEntryCounter = 0;
+  // No-op: ULID-based IDs have no state to reset.
 }

@@ -94,7 +94,7 @@ describe('processSignal', () => {
     const assignment = result.assignments[0];
     expect(assignment.jobId).toBe(result.jobs[0].id);
     expect(assignment.agentName).toBe(result.jobs[0].assignedAgent);
-    expect(assignment.id).toBe(`assign_${result.jobs[0].id}`);
+    expect(assignment.id).toMatch(/^assign_/);
   });
 
   it('links SkillInvocation.assignmentId to the Assignment record', () => {
