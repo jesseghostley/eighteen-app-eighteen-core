@@ -1,4 +1,4 @@
-import type { InMemoryRuntimeEventLogStore } from './runtime_event_log';
+import type { IRuntimeEventLogStore } from './storage/interfaces/IRuntimeEventLogStore';
 import type { EventBus } from './event_bus';
 import type { RuntimeEventMap } from './runtime_events';
 import { runtimeEventLog as defaultRuntimeEventLog } from './runtime_event_log';
@@ -20,7 +20,7 @@ import { runtimeEventLog as defaultRuntimeEventLog } from './runtime_event_log';
  */
 export function registerRuntimeEventLogSubscribers(
   bus: EventBus<RuntimeEventMap>,
-  store: InMemoryRuntimeEventLogStore = defaultRuntimeEventLog,
+  store: IRuntimeEventLogStore = defaultRuntimeEventLog,
 ): void {
   // ── Correlation chain maps (scoped to this registration) ─────────────────
   // planId → signalId

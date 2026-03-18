@@ -6,6 +6,7 @@ import { jobQueue, type QueueJob } from './job_queue';
 import { skillInvocationStore, type SkillInvocation } from './skill_invocation';
 import { assignmentStore, type Assignment } from './assignment';
 import { eventBus } from './event_bus';
+import { getStores } from './store_provider';
 
 /**
  * =============================================================================
@@ -158,6 +159,12 @@ export function processSignal(input: Pick<Signal, 'name' | 'payload'>): {
   skillInvocations: SkillInvocation[];
   assignments: Assignment[];
 } {
+  // When initializeStores() has been called (production), persist signals,
+  // plans, and artifacts to the backing store (SQLite or memory-via-factory).
+  // When null (tests that don't call initializeStores), the runtimeStore
+  // arrays remain the only storage — preserving existing test behaviour.
+  const stores = getStores();
+
   const signal: Signal = {
     id: nextId('signal', runtimeStore.signals.length),
     name: input.name,
@@ -165,10 +172,12 @@ export function processSignal(input: Pick<Signal, 'name' | 'payload'>): {
     createdAt: Date.now(),
   };
   runtimeStore.signals.push(signal);
+  stores?.signalStore.create(signal);
   eventBus.emit('signal.received', signal);
 
   const plan = createPlan(signal);
   runtimeStore.plans.push(plan);
+  stores?.planStore.create(plan);
   eventBus.emit('plan.created', plan);
 
   const jobs = createJobs(plan, signal);
@@ -182,6 +191,7 @@ export function processSignal(input: Pick<Signal, 'name' | 'payload'>): {
   runtimeStore.artifacts.push(...artifacts);
 
   artifacts.forEach((artifact) => {
+    stores?.artifactStore.create(artifact);
     eventBus.emit('artifact.created', artifact);
   });
 

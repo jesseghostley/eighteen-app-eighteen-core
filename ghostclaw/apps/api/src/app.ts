@@ -1,4 +1,5 @@
 import express from 'express';
+import { initializeStores } from '../../../packages/core/src/store_provider';
 import runtimeRouter from './routes/runtime';
 import signalsRouter from './routes/signals';
 import skillInvocationsRouter from './routes/skill_invocations';
@@ -7,6 +8,13 @@ import runtimeEventsRouter from './routes/runtime_events';
 import ghostMartRouter from './routes/ghost_mart';
 import { registerRuntimeEventLogSubscribers } from '../../../packages/core/src/runtime_event_log_subscriber';
 import { eventBus } from '../../../packages/core/src/event_bus';
+
+// Initialise stores from env config BEFORE any route or subscriber touches them.
+// In sqlite mode this creates all tables (signals, plans, jobs, assignments,
+// skill_invocations, artifacts, publish_events, audit_log, workspace_policies,
+// runtime_event_log) and replaces the in-memory singleton exports with
+// SQLite-backed implementations.
+initializeStores();
 
 const app = express();
 

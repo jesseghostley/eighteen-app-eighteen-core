@@ -1,7 +1,9 @@
 import type { EventBus } from './event_bus';
 import type { RuntimeEventMap } from './runtime_events';
-import type { InMemoryAuditLog, AuditLogEntry } from './audit_log';
-import type { InMemoryPublishEventStore } from './publish_event';
+import type { AuditLogEntry } from './audit_log';
+import type { IAuditLogStore } from './storage/interfaces/IAuditLogStore';
+import type { IPublishEventStore } from './storage/interfaces/IPublishEventStore';
+import type { IRuntimeEventLogStore } from './storage/interfaces/IRuntimeEventLogStore';
 import { eventBus as defaultEventBus } from './event_bus';
 import { auditLog as defaultAuditLog } from './audit_log';
 import { publishEventStore as defaultPublishEventStore } from './publish_event';
@@ -10,7 +12,6 @@ import {
   resetEventLogSubscriberState,
 } from './runtime_event_log_subscriber';
 import { runtimeEventLog as defaultRuntimeEventLog } from './runtime_event_log';
-import type { InMemoryRuntimeEventLogStore } from './runtime_event_log';
 
 let _auditEntryCounter = 0;
 
@@ -37,9 +38,9 @@ export function resetSubscriberState(): void {
  */
 export function registerRuntimeSubscribers(
   bus: EventBus<RuntimeEventMap> = defaultEventBus,
-  auditLog: InMemoryAuditLog = defaultAuditLog,
-  publishStore: InMemoryPublishEventStore = defaultPublishEventStore,
-  eventLogStore: InMemoryRuntimeEventLogStore = defaultRuntimeEventLog,
+  auditLog: IAuditLogStore = defaultAuditLog,
+  publishStore: IPublishEventStore = defaultPublishEventStore,
+  eventLogStore: IRuntimeEventLogStore = defaultRuntimeEventLog,
 ): void {
   // ─── Runtime event log subscribers ───────────────────────────────────────
   registerRuntimeEventLogSubscribers(bus, eventLogStore);
